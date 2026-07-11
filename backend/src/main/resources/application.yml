@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: youou-aso
+  profiles:
+    active: local
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+server:
+  port: 8080
+
+youou:
+  security:
+    jwt-issuer: Youou-ASO
+    jwt-secret: ${YOUOU_JWT_SECRET:}
+    jwt-secret-file: ${YOUOU_JWT_SECRET_FILE:${user.home}/.youou-aso/jwt-secret}
+    jwt-ttl-seconds: ${YOUOU_JWT_TTL_SECONDS:86400}

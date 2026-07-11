@@ -1,0 +1,26 @@
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+logs/
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
+
+# Backend builds
+backend/target/
+
+# Deployment artifacts
+deploy/
+
