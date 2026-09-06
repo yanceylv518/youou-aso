@@ -1,10 +1,16 @@
 <template>
   <section class="dashboard-page">
-    <header class="page-header">
-      <p class="page-note">{{ t('dashboard.adminSubtitle') }}</p>
-      <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">
-        {{ t('ordersPage.refresh') }}
+    <header class="page-header dashboard-hero">
+      <div class="hero-copy">
+        <span class="hero-eyebrow">{{ t('dashboard.adminEyebrow') }}</span>
+        <h1>{{ t('dashboard.adminTitle') }}</h1>
+        <p class="page-note">{{ t('dashboard.adminSubtitle') }}</p>
+      </div>
+      <el-button class="hero-refresh" :icon="Refresh" :loading="loading" @click="loadDashboard">
+        {{ t('dashboard.refresh') }}
       </el-button>
+      <i class="hero-glow hero-glow-one" />
+      <i class="hero-glow hero-glow-two" />
     </header>
 
     <div v-loading="loading" class="metric-grid">
@@ -59,19 +65,19 @@
           <h2>{{ t('dashboard.pendingWork') }}</h2>
           <el-button text @click="router.push('/admin/pending-confirm-orders')">{{ t('dashboard.viewAll') }}</el-button>
         </div>
-        <el-table :data="priorityOrders" :empty-text="t('ordersPage.empty')">
-          <el-table-column prop="orderNo" :label="t('ordersPage.orderNo')" min-width="150" />
-          <el-table-column :label="t('ordersPage.app')" min-width="180">
+        <el-table :data="priorityOrders" :empty-text="t('dashboard.noOrders')">
+          <el-table-column prop="orderNo" :label="t('dashboard.orderNo')" min-width="150" />
+          <el-table-column :label="t('dashboard.app')" min-width="180">
             <template #default="{ row }">{{ row.appName }}</template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.status')" width="130" align="center">
+          <el-table-column :label="t('dashboard.status')" width="130" align="center">
             <template #default="{ row }">
               <el-tag :type="orderStatusTag(row.status)" effect="light">
                 {{ t(`ordersPage.statuses.${row.status}`) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.amount')" width="120" align="right">
+          <el-table-column :label="t('dashboard.amount')" width="120" align="right">
             <template #default="{ row }">{{ formatMoney(row.totalAmount) }}</template>
           </el-table-column>
         </el-table>
@@ -82,15 +88,15 @@
           <h2>{{ t('dashboard.pendingSpecialAudits') }}</h2>
           <el-button text @click="router.push('/admin/audits')">{{ t('dashboard.viewAll') }}</el-button>
         </div>
-        <el-table :data="pendingAudits" :empty-text="t('specialAudit.empty')">
-          <el-table-column prop="auditNo" :label="t('specialAudit.auditNo')" min-width="160" />
-          <el-table-column :label="t('ordersPage.app')" min-width="180">
+        <el-table :data="pendingAudits" :empty-text="t('dashboard.noSpecialRequests')">
+          <el-table-column prop="auditNo" :label="t('dashboard.reviewNo')" min-width="160" />
+          <el-table-column :label="t('dashboard.app')" min-width="180">
             <template #default="{ row }">{{ row.appName }}</template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.type')" min-width="150">
+          <el-table-column :label="t('dashboard.orderType')" min-width="150">
             <template #default="{ row }">{{ t(`ordersPage.types.${row.orderType}`) }}</template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.status')" width="120" align="center">
+          <el-table-column :label="t('dashboard.status')" width="120" align="center">
             <template #default="{ row }">
               <el-tag type="warning" effect="light">{{ t(`specialAudit.statuses.${row.status}`) }}</el-tag>
             </template>
@@ -146,9 +152,11 @@ import { getAdminApps, type CustomerApp } from '@/api/applications'
 import { getAdminOrders, type Order, type OrderStatus } from '@/api/orders'
 import { getAdminSpecialAudits, type SpecialOrderAudit } from '@/api/specialOrderAudits'
 import { getAdminWalletTransactions, type WalletTransaction } from '@/api/wallet'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const router = useRouter()
+const auth = useAuthStore()
 
 const loading = ref(false)
 const orders = ref<Order[]>([])
@@ -172,10 +180,10 @@ async function loadDashboard() {
   loading.value = true
   try {
     const [orderResult, auditResult, transactionResult, appResult] = await Promise.all([
-      getAdminOrders(),
-      getAdminSpecialAudits(),
-      getAdminWalletTransactions({ limit: 8 }),
-      getAdminApps()
+      canReadOrders() ? getAdminOrders() : Promise.resolve([]),
+      auth.hasMenu('orders.pendingReview') ? getAdminSpecialAudits() : Promise.resolve([]),
+      auth.hasMenu('finance.transactions') ? getAdminWalletTransactions({ limit: 8 }) : Promise.resolve([]),
+      auth.hasMenu('applications') ? getAdminApps() : Promise.resolve([])
     ])
     orders.value = orderResult
     audits.value = auditResult
@@ -186,6 +194,13 @@ async function loadDashboard() {
   } finally {
     loading.value = false
   }
+}
+
+function canReadOrders() {
+  return [
+    'orders.pendingReview', 'orders.pendingConfirm', 'orders.apple', 'orders.google', 'orders.ipad',
+    'orderExecution.pending', 'orderExecution.executing', 'orderExecution.completed'
+  ].some((code) => auth.hasMenu(code))
 }
 
 function orderStatusTag(status: OrderStatus) {
@@ -212,7 +227,7 @@ function formatDate(value: string | undefined | null) {
 
 <style scoped>
 .dashboard-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .page-header,
@@ -235,7 +250,7 @@ p {
 .page-note {
   max-width: 720px;
   margin: 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.6;
 }
 
@@ -252,7 +267,7 @@ p {
   align-items: center;
   gap: 14px;
   padding: 18px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 14px 32px rgb(16 24 40 / 5%);
@@ -275,7 +290,7 @@ p {
 
 .metric-card p {
   margin: 0 0 7px;
-  color: #667085;
+  color: #64748b;
 }
 
 .metric-card strong {
@@ -283,23 +298,23 @@ p {
 }
 
 .accent-blue .metric-icon {
-  background: #dbe8ff;
-  color: #2f7df4;
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .accent-green .metric-icon {
-  background: #d9f5e6;
-  color: #37bd78;
+  background: #f0fdf4;
+  color: #16a34a;
 }
 
 .accent-orange .metric-icon {
-  background: #ffedcf;
-  color: #f5a11c;
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .accent-purple .metric-icon {
-  background: #e7ddff;
-  color: #7657d8;
+  background: #f5f3ff;
+  color: #7c3aed;
 }
 
 .quick-actions {
@@ -318,7 +333,7 @@ p {
 .panel {
   min-width: 0;
   padding: 18px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
 }
@@ -343,7 +358,7 @@ p {
 
 .panel :deep(.el-table__header th) {
   background: #f6f7f9;
-  color: #667085;
+  color: #64748b;
   font-weight: 500;
 }
 

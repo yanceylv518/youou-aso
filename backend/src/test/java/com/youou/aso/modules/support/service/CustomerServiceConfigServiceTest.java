@@ -33,21 +33,38 @@ class CustomerServiceConfigServiceTest {
                 "Recharge Support",
                 "https://static.example.test/qr.png",
                 "Scan to contact support",
+                "support@example.test",
+                "https://teams.example.test/support",
+                "https://t.me/example_support",
+                "https://wa.me/12025550123",
                 true
         ));
 
         assertThat(result.serviceName()).isEqualTo("Recharge Support");
         assertThat(result.qrCodeUrl()).isEqualTo("https://static.example.test/qr.png");
         assertThat(result.contactHint()).isEqualTo("Scan to contact support");
+        assertThat(result.email()).isEqualTo("support@example.test");
+        assertThat(result.whatsappUrl()).isEqualTo("https://wa.me/12025550123");
         assertThat(result.enabled()).isTrue();
     }
 
     @Test
-    void rejectsEnabledConfigWithoutQrCodeUrl() {
+    void rejectsVisibleChannelWithoutConfiguredValue() {
         assertThatThrownBy(() -> service.updateConfig(new UpdateCustomerServiceConfigCommand(
                 "Recharge Support",
-                "",
+                null,
                 "Scan to contact support",
+                "",
+                true,
+                null,
+                false,
+                null,
+                null,
+                null,
+                false,
+                null,
+                false,
+                null,
                 true
         )))
                 .isInstanceOf(BusinessException.class)
@@ -56,11 +73,33 @@ class CustomerServiceConfigServiceTest {
     }
 
     @Test
+    void acceptsEnabledConfigWithEmailOnly() {
+        CustomerServiceConfigResult result = service.updateConfig(new UpdateCustomerServiceConfigCommand(
+                "Customer Support",
+                null,
+                "Contact support",
+                "support@example.test",
+                null,
+                null,
+                null,
+                true
+        ));
+
+        assertThat(result.enabled()).isTrue();
+        assertThat(result.qrCodeUrl()).isNull();
+        assertThat(result.email()).isEqualTo("support@example.test");
+    }
+
+    @Test
     void rejectsNonHttpQrCodeUrl() {
         assertThatThrownBy(() -> service.updateConfig(new UpdateCustomerServiceConfigCommand(
                 "Recharge Support",
                 "javascript:alert(1)",
                 "Scan to contact support",
+                null,
+                null,
+                null,
+                null,
                 false
         )))
                 .isInstanceOf(BusinessException.class)
@@ -83,6 +122,17 @@ class CustomerServiceConfigServiceTest {
             config.setServiceName(nextConfig.getServiceName());
             config.setQrCodeUrl(nextConfig.getQrCodeUrl());
             config.setContactHint(nextConfig.getContactHint());
+            config.setEmail(nextConfig.getEmail());
+            config.setEmailVisible(nextConfig.isEmailVisible());
+            config.setPhone(nextConfig.getPhone());
+            config.setPhoneVisible(nextConfig.isPhoneVisible());
+            config.setTeamsUrl(nextConfig.getTeamsUrl());
+            config.setTelegramUrl(nextConfig.getTelegramUrl());
+            config.setTelegramQrUrl(nextConfig.getTelegramQrUrl());
+            config.setTelegramQrVisible(nextConfig.isTelegramQrVisible());
+            config.setWechatQrUrl(nextConfig.getWechatQrUrl());
+            config.setWechatQrVisible(nextConfig.isWechatQrVisible());
+            config.setWhatsappUrl(nextConfig.getWhatsappUrl());
             config.setEnabled(nextConfig.isEnabled());
             config.setUpdatedAt(LocalDateTime.of(2026, 6, 22, 12, 0));
             return config;

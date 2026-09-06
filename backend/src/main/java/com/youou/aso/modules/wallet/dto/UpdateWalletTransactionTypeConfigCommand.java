@@ -5,6 +5,9 @@ import com.youou.aso.modules.wallet.domain.WalletTransactionType;
 public record UpdateWalletTransactionTypeConfigCommand(
         WalletTransactionType transactionType,
         String displayNameZh,
-        String displayNameEn
+        String displayNameEn,
+        String displayNameRu,
+        String displayNamePt,
+        String displayNameEs
 ) {
 }

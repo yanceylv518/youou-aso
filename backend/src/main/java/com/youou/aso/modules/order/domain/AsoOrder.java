@@ -18,6 +18,8 @@ public class AsoOrder {
     private Long customerAppId;
     private Long sourceAuditId;
     private OrderType orderType;
+    private Long orderModuleId;
+    private String orderModuleName;
     private PriceCode pricingCode;
     private StoreType storeType;
     private String regionCode;
@@ -30,6 +32,7 @@ public class AsoOrder {
     private Integer executionHours;
     private Integer totalDays;
     private Integer quantity;
+    private BigDecimal refundAmount;
     private BigDecimal unitPrice;
     private BigDecimal totalAmount;
     private BigDecimal balanceBefore;
@@ -47,6 +50,7 @@ public class AsoOrder {
     private LocalDateTime updatedAt;
     private List<OrderItem> items = new ArrayList<>();
     private List<OrderCommentDetail> commentDetails = new ArrayList<>();
+    private List<OrderEvent> events = new ArrayList<>();
 
     public Long getId() {
         return id;
@@ -111,6 +115,14 @@ public class AsoOrder {
     public void setOrderType(OrderType orderType) {
         this.orderType = orderType;
     }
+
+    public Long getOrderModuleId() { return orderModuleId; }
+
+    public void setOrderModuleId(Long orderModuleId) { this.orderModuleId = orderModuleId; }
+
+    public String getOrderModuleName() { return orderModuleName; }
+
+    public void setOrderModuleName(String orderModuleName) { this.orderModuleName = orderModuleName; }
 
     public PriceCode getPricingCode() {
         return pricingCode;
@@ -206,6 +218,14 @@ public class AsoOrder {
 
     public void setQuantity(Integer quantity) {
         this.quantity = quantity;
+    }
+
+    public BigDecimal getRefundAmount() {
+        return refundAmount;
+    }
+
+    public void setRefundAmount(BigDecimal refundAmount) {
+        this.refundAmount = refundAmount;
     }
 
     public BigDecimal getUnitPrice() {
@@ -343,4 +363,11 @@ public class AsoOrder {
     public void setCommentDetails(List<OrderCommentDetail> commentDetails) {
         this.commentDetails = commentDetails == null ? new ArrayList<>() : new ArrayList<>(commentDetails);
     }
-}
+
+    public List<OrderEvent> getEvents() {
+        return events;
+    }
+
+    public void setEvents(List<OrderEvent> events) {
+        this.events = events == null ? new ArrayList<>() : events;
+    }}

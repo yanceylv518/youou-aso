@@ -108,6 +108,7 @@ public class SpecialOrderAuditService {
         audit.setStatus(SpecialAuditStatus.PENDING_REVIEW);
         SpecialOrderAudit saved = specialOrderAuditRepository.save(audit);
         List<SpecialOrderAuditItem> items = auditItems(command.items(), command.orderType(), app, regionCode);
+        validateRegionCombination(items.stream().map(SpecialOrderAuditItem::getRegionCode).toList());
         specialOrderAuditItemRepository.saveAll(saved.getId(), items);
         saved.setItems(items);
         return saved;
@@ -156,16 +157,18 @@ public class SpecialOrderAuditService {
         if (!isSpecialOrderType(orderType)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
-        }
-
         CustomerApp app = customerAppRepository.findById(customerAppId)
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .filter(candidate -> CustomerAppStatus.ACTIVE.equals(candidate.getStatus()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
         String resolvedRegionCode = resolveLinkedRegion(app, regionCode);
         String content = defaultAdminSpecialContent(orderType, app);
+        List<SpecialOrderAuditItem> auditItems = auditItems(items, orderType, app, resolvedRegionCode);
+        validateRegionCombination(auditItems.stream().map(SpecialOrderAuditItem::getRegionCode).toList());
+        BigDecimal calculatedAmount = isRankGuaranteeType(orderType) ? calculateItemPricing(auditItems) : amount;
+        if (calculatedAmount == null || calculatedAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+        }
 
         SpecialOrderAudit audit = new SpecialOrderAudit();
         audit.setAuditNo(generateAuditNo());
@@ -181,18 +184,21 @@ public class SpecialOrderAuditService {
         audit.setContactType(normalizeOptional(contactType, 32));
         audit.setContactValue(normalizeOptional(contactValue, 128));
         audit.setNegotiatedContent(content);
-        audit.setNegotiatedPrice(amount);
+        audit.setNegotiatedPrice(calculatedAmount);
         audit.setStatus(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
         audit.setReviewedByAdminId(adminId);
         audit.setReviewedAt(now());
         SpecialOrderAudit saved = specialOrderAuditRepository.save(audit);
-        List<SpecialOrderAuditItem> auditItems = auditItems(items, orderType, app, resolvedRegionCode);
         specialOrderAuditItemRepository.saveAll(saved.getId(), auditItems);
         saved.setItems(auditItems);
 
         try {
             AsoOrder order = submitApprovedAudit(customerId, saved.getId());
-            return new AdminSpecialOrderSubmission(order, saved, true);
+            order.setStatus(OrderStatus.PENDING_EXECUTION);
+            order.setConfirmedByAdminId(adminId);
+            order.setConfirmedAt(now());
+            AsoOrder confirmed = orderRepository.update(order);
+            return new AdminSpecialOrderSubmission(confirmed, saved, true);
         } catch (BusinessException exception) {
             if (ErrorCode.BALANCE_NOT_ENOUGH.equals(exception.getErrorCode())) {
                 return new AdminSpecialOrderSubmission(null, saved, false);
@@ -208,15 +214,44 @@ public class SpecialOrderAuditService {
         if (!SpecialAuditStatus.PENDING_REVIEW.equals(audit.getStatus())) {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_STATUS_INVALID);
         }
-        if (command == null || command.negotiatedPrice() == null) {
+        if (command == null) {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
         }
-        if (command.negotiatedPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+
+        BigDecimal finalPrice;
+        if (isRankGuaranteeType(audit.getOrderType())) {
+            List<SpecialOrderAuditItem> items = specialOrderAuditItemRepository.findByAuditIds(List.of(auditId))
+                    .getOrDefault(auditId, List.of());
+            if (items.isEmpty()) {
+                finalPrice = command.negotiatedPrice();
+                if (finalPrice == null || finalPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                    throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
+                }
+            } else if (command.itemPricing() == null || command.itemPricing().size() != items.size()) {
+                throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
+            } else {
+              Map<Long, ReviewSpecialAuditCommand.ItemPricing> pricingById = command.itemPricing().stream()
+                    .filter(value -> value != null && value.itemId() != null)
+                    .collect(java.util.stream.Collectors.toMap(ReviewSpecialAuditCommand.ItemPricing::itemId, value -> value,
+                            (left, right) -> { throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID); }));
+              for (SpecialOrderAuditItem item : items) {
+                ReviewSpecialAuditCommand.ItemPricing pricing = pricingById.get(item.getId());
+                if (pricing == null) throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
+                item.setUnitPrice(validUnitPrice(pricing.unitPrice()));
+                item.setExecutionDays(validExecutionDays(pricing.executionDays()));
+                specialOrderAuditItemRepository.updatePricing(item.getId(), item.getUnitPrice(), item.getExecutionDays());
+              }
+              finalPrice = calculateItemPricing(items);
+            }
+        } else {
+            finalPrice = command.negotiatedPrice();
+            if (finalPrice == null || finalPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+            }
         }
 
         audit.setNegotiatedContent(normalizeOrFallback(command.negotiatedContent(), audit.getRequestedContent()));
-        audit.setNegotiatedPrice(command.negotiatedPrice());
+        audit.setNegotiatedPrice(finalPrice);
         audit.setStatus(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
         audit.setReviewedByAdminId(adminId);
         audit.setReviewedAt(now());
@@ -282,6 +317,7 @@ public class SpecialOrderAuditService {
         order.setExpectedCompletedAt(orderDate.plusDays(1).atStartOfDay());
 
         AsoOrder saved = orderRepository.save(order);
+        walletService.linkTransactionToOrder(debit.transactionId(), saved.getId());
         OrderItem item = specialOrderItem(audit);
         orderItemRepository.saveAll(saved.getId(), List.of(item));
         saved.setItems(List.of(item));
@@ -324,6 +360,18 @@ public class SpecialOrderAuditService {
         return attachItems(specialOrderAuditRepository.findByCustomerId(customerId));
     }
 
+    public SpecialOrderAudit getCustomerAudit(Long customerId, Long auditId) {
+        if (customerId == null || auditId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        SpecialOrderAudit audit = specialOrderAuditRepository.findById(auditId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!customerId.equals(audit.getCustomerId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return attachItems(List.of(audit)).get(0);
+    }
+
     public PageResult<SpecialOrderAudit> pageCustomerAudits(Long customerId, Integer page, Integer pageSize) {
         if (customerId == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -340,6 +388,15 @@ public class SpecialOrderAuditService {
 
     public List<SpecialOrderAudit> listAdminAudits() {
         return attachItems(specialOrderAuditRepository.findAll());
+    }
+
+    public SpecialOrderAudit getAdminAudit(Long auditId) {
+        if (auditId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        SpecialOrderAudit audit = specialOrderAuditRepository.findById(auditId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        return attachItems(List.of(audit)).get(0);
     }
 
     public PageResult<SpecialOrderAudit> pageAdminAudits(Integer page, Integer pageSize) {
@@ -397,9 +454,13 @@ public class SpecialOrderAuditService {
         return items.stream()
                 .filter(item -> item != null)
                 .map(item -> {
-                    String keyword = normalizeLength(item.keyword(), 255, true);
+                    boolean chartRank = orderType == OrderType.CHART_RANK_GUARANTEE;
+                    String keyword = chartRank ? null : normalizeLength(item.keyword(), 255, true);
+                    String chartType = chartRank
+                            ? normalizeLength(item.chartType() == null || item.chartType().isBlank() ? item.keyword() : item.chartType(), 255, true)
+                            : null;
                     Integer targetRank = item.targetRank();
-                    if (orderType == OrderType.RANK_GUARANTEE && (targetRank == null || targetRank <= 0)) {
+                    if (isRankGuaranteeType(orderType) && (targetRank == null || targetRank <= 0)) {
                         throw new BusinessException(ErrorCode.BAD_REQUEST);
                     }
                     SpecialOrderAuditItem result = new SpecialOrderAuditItem();
@@ -407,12 +468,39 @@ public class SpecialOrderAuditService {
                             ? fallbackRegionCode
                             : item.regionCode();
                     result.setRegionCode(resolveLinkedRegion(app, requestedRegion));
-                    result.setKeyword(keyword);
-                    result.setTargetRank(orderType == OrderType.RANK_GUARANTEE ? targetRank : null);
+                    // The legacy keyword column is non-null. Keep the chart type there only
+                    // for old deployments while exposing chartType as the actual API field.
+                    result.setKeyword(chartRank ? chartType : keyword);
+                    result.setChartType(chartType);
+                    result.setTargetRank(isRankGuaranteeType(orderType) ? targetRank : null);
                     result.setCoverageNote(normalizeLength(item.coverageNote(), 500, false));
+                    if (isRankGuaranteeType(orderType) && (item.unitPrice() != null || item.executionDays() != null)) {
+                        result.setUnitPrice(validUnitPrice(item.unitPrice()));
+                        result.setExecutionDays(validExecutionDays(item.executionDays()));
+                    }
                     return result;
                 })
                 .toList();
+    }
+
+    private BigDecimal calculateItemPricing(List<SpecialOrderAuditItem> items) {
+        if (items == null || items.isEmpty()) throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
+        return items.stream()
+                .map(item -> validUnitPrice(item.getUnitPrice()).multiply(BigDecimal.valueOf(validExecutionDays(item.getExecutionDays()))))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal validUnitPrice(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0 || value.scale() > 2) {
+            throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+        }
+        return value.setScale(2);
+    }
+
+    private int validExecutionDays(Integer value) {
+        if (value == null || value <= 0 || value > 3650) throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+        return value;
     }
 
     private String resolveLinkedRegion(CustomerApp app, String requestedRegionCode) {
@@ -428,11 +516,29 @@ public class SpecialOrderAuditService {
     }
 
     private boolean isSpecialOrderType(OrderType orderType) {
-        return orderType == OrderType.RANK_GUARANTEE || orderType == OrderType.KEYWORD_COVERAGE;
+        return isRankGuaranteeType(orderType) || orderType == OrderType.KEYWORD_COVERAGE;
+    }
+
+    private void validateRegionCombination(java.util.Collection<String> regionCodes) {
+        java.util.Set<String> distinct = regionCodes.stream()
+                .filter(code -> code != null && !code.isBlank())
+                .map(code -> code.trim().toUpperCase())
+                .collect(java.util.stream.Collectors.toSet());
+        if (distinct.contains("CN") && distinct.size() > 1) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+    }
+    private boolean isRankGuaranteeType(OrderType orderType) {
+        return orderType == OrderType.RANK_GUARANTEE || orderType == OrderType.CHART_RANK_GUARANTEE;
     }
 
     private String defaultAdminSpecialContent(OrderType orderType, CustomerApp app) {
-        String serviceName = orderType == OrderType.RANK_GUARANTEE ? "关键词保排名服务" : "关键词覆盖服务";
+        String serviceName = switch (orderType) {
+            case RANK_GUARANTEE -> "关键词保排名服务";
+            case CHART_RANK_GUARANTEE -> "榜单保排名服务";
+            case KEYWORD_COVERAGE -> "关键词覆盖服务";
+            default -> throw new BusinessException(ErrorCode.BAD_REQUEST);
+        };
         return serviceName + " - " + app.getAppName();
     }
 

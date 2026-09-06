@@ -52,6 +52,7 @@ public class SecurityConfig {
                                 "/api/auth/password-reset/code",
                                 "/api/auth/password-reset/confirm"
                         ).permitAll()
+                        .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/regions/enabled").permitAll()
                         .requestMatchers("/uploads/app-icons/**").permitAll()
                         .anyRequest().authenticated()

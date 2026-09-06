@@ -16,6 +16,9 @@ public class JdbcWalletTransactionTypeConfigRepository implements WalletTransact
         config.setTransactionType(WalletTransactionType.valueOf(rs.getString("transaction_type")));
         config.setDisplayNameZh(rs.getString("display_name_zh"));
         config.setDisplayNameEn(rs.getString("display_name_en"));
+        config.setDisplayNameRu(rs.getString("display_name_ru"));
+        config.setDisplayNamePt(rs.getString("display_name_pt"));
+        config.setDisplayNameEs(rs.getString("display_name_es"));
         config.setUpdatedAt(rs.getTimestamp("updated_at").toLocalDateTime());
         return config;
     };
@@ -37,16 +40,22 @@ public class JdbcWalletTransactionTypeConfigRepository implements WalletTransact
         for (WalletTransactionTypeConfig config : configs) {
             jdbcTemplate.update(
                     """
-                            INSERT INTO wallet_transaction_type_config (transaction_type, display_name_zh, display_name_en)
-                            VALUES (?, ?, ?)
+                            INSERT INTO wallet_transaction_type_config (transaction_type, display_name_zh, display_name_en, display_name_ru, display_name_pt, display_name_es)
+                            VALUES (?, ?, ?, ?, ?, ?)
                             ON DUPLICATE KEY UPDATE
                                 display_name_zh = VALUES(display_name_zh),
                                 display_name_en = VALUES(display_name_en),
+                                display_name_ru = VALUES(display_name_ru),
+                                display_name_pt = VALUES(display_name_pt),
+                                display_name_es = VALUES(display_name_es),
                                 updated_at = CURRENT_TIMESTAMP
                             """,
                     config.getTransactionType().name(),
                     config.getDisplayNameZh(),
-                    config.getDisplayNameEn()
+                    config.getDisplayNameEn(),
+                    config.getDisplayNameRu(),
+                    config.getDisplayNamePt(),
+                    config.getDisplayNameEs()
             );
         }
     }

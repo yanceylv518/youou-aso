@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ArrowRight,
@@ -106,8 +106,16 @@ import {
 } from '@element-plus/icons-vue'
 import type { StoreType } from '@/api/applications'
 import StoreIcon from '@/components/StoreIcon.vue'
+import { getPublicHomeMetrics, type HomeMetricsConfig } from '@/api/support'
 
 const { t } = useI18n()
+const homeMetrics = ref<HomeMetricsConfig>({
+  appsValue: '10,000+',
+  satisfactionValue: '98.6%',
+  experienceYears: 5,
+  teamValue: '50+',
+  updatedAt: null
+})
 
 const stores: Array<{ name: string; storeType: StoreType }> = [
   { name: 'App Store', storeType: 'APP_STORE' },
@@ -125,11 +133,19 @@ const services = computed(() => [
 ])
 
 const metrics = computed(() => [
-  { value: '10,000+', label: t('home.metrics.apps'), note: t('home.metrics.appsNote'), icon: Briefcase, theme: 'blue' },
-  { value: '98.6%', label: t('home.metrics.satisfaction'), note: t('home.metrics.satisfactionNote'), icon: Histogram, theme: 'green' },
-  { value: t('home.metrics.yearsValue'), label: t('home.metrics.experience'), note: t('home.metrics.experienceNote'), icon: GoldMedal, theme: 'purple' },
-  { value: '50+', label: t('home.metrics.team'), note: t('home.metrics.teamNote'), icon: UserFilled, theme: 'yellow' }
+  { value: homeMetrics.value.appsValue, label: t('home.metrics.apps'), note: t('home.metrics.appsNote'), icon: Briefcase, theme: 'blue' },
+  { value: homeMetrics.value.satisfactionValue, label: t('home.metrics.satisfaction'), note: t('home.metrics.satisfactionNote'), icon: Histogram, theme: 'green' },
+  { value: t('home.metrics.yearsValue', { count: homeMetrics.value.experienceYears }), label: t('home.metrics.experience'), note: t('home.metrics.experienceNote'), icon: GoldMedal, theme: 'purple' },
+  { value: homeMetrics.value.teamValue, label: t('home.metrics.team'), note: t('home.metrics.teamNote'), icon: UserFilled, theme: 'yellow' }
 ])
+
+onMounted(async () => {
+  try {
+    homeMetrics.value = await getPublicHomeMetrics()
+  } catch {
+    // Keep the built-in defaults when the public configuration is unavailable.
+  }
+})
 </script>
 
 <style scoped>
@@ -199,7 +215,7 @@ const metrics = computed(() => [
   gap: 8px;
   margin: 0 0 24px;
   padding: 8px 14px;
-  border: 1px solid #dbe8ff;
+  border: 1px solid #dbeafe;
   border-radius: 999px;
   background: rgb(255 255 255 / 76%);
   color: #2878f0;
@@ -214,7 +230,7 @@ const metrics = computed(() => [
   height: 16px;
   padding: 3px;
   border-radius: 6px;
-  background: #2f7df4;
+  background: #2563eb;
   color: #ffffff;
 }
 
@@ -233,7 +249,7 @@ h1 {
 }
 
 h1 span {
-  color: #2f7df4;
+  color: #2563eb;
 }
 
 .summary {
@@ -265,8 +281,8 @@ h1 span {
 }
 
 .primary-action {
-  border-color: #2f7df4;
-  background: linear-gradient(135deg, #2f7df4, #246be0);
+  border-color: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #246be0);
   box-shadow: 0 16px 30px rgb(47 125 244 / 26%);
 }
 
@@ -341,7 +357,7 @@ h1 span {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #2f7df4;
+  background: #2563eb;
 }
 
 .panel-dots span:nth-child(2) {
@@ -373,8 +389,8 @@ h1 span {
 }
 
 .panel-platforms .active {
-  border-color: #2f7df4;
-  background: #2f7df4;
+  border-color: #2563eb;
+  background: #2563eb;
   color: #ffffff;
   box-shadow: 0 10px 22px rgb(47 125 244 / 24%);
 }
@@ -448,23 +464,23 @@ h1 span {
 }
 
 .blue {
-  background: #dbe8ff;
-  color: #2f7df4;
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .green {
-  background: #d9f5e6;
-  color: #37bd78;
+  background: #f0fdf4;
+  color: #16a34a;
 }
 
 .orange {
-  background: #ffedcf;
-  color: #f5a11c;
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .purple {
-  background: #e7ddff;
-  color: #7657d8;
+  background: #f5f3ff;
+  color: #7c3aed;
 }
 
 .blue-soft {
@@ -479,7 +495,7 @@ h1 span {
 
 .yellow {
   background: #ffe5a6;
-  color: #eba51f;
+  color: #b45309;
 }
 
 .metric-panel {
@@ -555,7 +571,7 @@ h1 span {
   align-items: center;
   gap: 24px;
   margin: 0;
-  color: #2f7df4;
+  color: #2563eb;
   font-size: 24px;
   font-weight: 900;
 }

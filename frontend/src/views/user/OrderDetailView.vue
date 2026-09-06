@@ -3,6 +3,9 @@
     <div class="detail-toolbar">
       <el-button :icon="ArrowLeft" @click="goBack">{{ t('orderDetail.back') }}</el-button>
       <el-button :icon="Refresh" @click="loadOrder">{{ t('ordersPage.refresh') }}</el-button>
+      <el-button v-if="order?.status === 'PENDING_CONFIRM' && !order.sourceAuditId" type="primary" :icon="Edit" @click="editOrder">
+        {{ t('ordersPage.editOrder') }}
+      </el-button>
       <el-button :icon="Download" :loading="exporting" :disabled="!order" @click="handleExportDetail">
         {{ t('orderDetail.exportDetail') }}
       </el-button>
@@ -22,7 +25,7 @@
             <span>{{ order.appIdentifier }}</span>
             <div class="app-tags">
               <span>{{ storeLabel(order.storeType) }}</span>
-              <span>{{ typeLabel(order.orderType) }}</span>
+              <span>{{ orderTypeLabel(order) }}</span>
             </div>
           </div>
         </div>
@@ -32,6 +35,43 @@
           <el-tag :type="statusTagType(order.status)" effect="light">{{ statusLabel(order.status) }}</el-tag>
         </div>
       </div>
+
+      <section v-if="sourceAudit?.items?.length" class="detail-card">
+        <h2>{{ t('orderDetail.itemDetails') }}</h2>
+        <el-table :data="sourceAudit.items" class="detail-table">
+          <el-table-column :label="t('ordersPage.region')" min-width="150">
+            <template #default="{ row }">{{ detailRegionLabel(row.regionCode) }}</template>
+          </el-table-column>
+          <el-table-column :label="order.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keyword')" min-width="220">
+            <template #default="{ row }">{{ order.orderType === 'CHART_RANK_GUARANTEE' ? (row.chartType || row.keyword || '-') : (row.keyword || '-') }}</template>
+          </el-table-column>
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('orderCreate.targetRank')" min-width="130">
+            <template #default="{ row }">{{ row.targetRank ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('orderCreate.unitPrice')" min-width="120" align="right">
+            <template #default="{ row }">{{ row.unitPrice == null ? '-' : money(row.unitPrice) }}</template>
+          </el-table-column>
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('orderCreate.executionDays')" min-width="100" align="right">
+            <template #default="{ row }">{{ row.executionDays ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('ordersPage.amount')" min-width="120" align="right">
+            <template #default="{ row }">{{ row.amount == null ? '-' : money(row.amount) }}</template>
+          </el-table-column>
+          <el-table-column v-if="order.orderType === 'KEYWORD_COVERAGE'" :label="t('orderCreate.currentRank')" min-width="180">
+            <template #default="{ row }">{{ row.coverageNote || '-' }}</template>
+          </el-table-column>
+        </el-table>
+      </section>
+
+      <section class="detail-card">
+        <h2>{{ t('orderDetail.timeline') }}</h2>
+        <div class="timeline-grid">
+          <div v-for="item in timelineItems" :key="item.key" class="timeline-item">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+        </div>
+      </section>
 
       <div class="detail-grid">
         <section class="detail-card">
@@ -44,6 +84,8 @@
             <div v-if="isKeywordInstall"><dt>{{ t('orderDetail.executionHours') }}</dt><dd>{{ valueOrDash(order.executionHours) }}</dd></div>
             <div><dt>{{ t('ordersPage.createdAt') }}</dt><dd>{{ formatDateTime(order.createdAt) }}</dd></div>
             <div><dt>{{ t('ordersPage.expectedCompletedAt') }}</dt><dd>{{ formatDateTime(order.expectedCompletedAt) }}</dd></div>
+            <div v-if="order.sourceAuditId"><dt>{{ t('orderCreate.contactType') }}</dt><dd>{{ sourceAudit?.contactType || '-' }}</dd></div>
+            <div v-if="order.sourceAuditId"><dt>{{ t('orderCreate.contactValue') }}</dt><dd class="contact-value">{{ sourceAudit?.contactValue || '-' }}</dd></div>
           </dl>
         </section>
 
@@ -52,6 +94,10 @@
           <div class="amount-summary">
             <span>{{ t('ordersPage.amount') }}</span>
             <strong>{{ money(order.totalAmount) }}</strong>
+          </div>
+          <div v-if="order.refundAmount !== null && order.refundAmount !== undefined" class="amount-summary">
+            <span>{{ t('ordersPage.refundAmount') }}</span>
+            <strong>{{ money(order.refundAmount) }}</strong>
           </div>
           <div class="fee-metrics">
             <div>
@@ -70,13 +116,13 @@
         </section>
       </div>
 
-      <section class="detail-card">
+      <section v-if="!sourceAudit?.items?.length" class="detail-card">
         <h2>{{ t('orderDetail.itemDetails') }}</h2>
         <el-table :data="order.items" class="detail-table" :empty-text="t('orderDetail.noItems')">
           <el-table-column :label="t('ordersPage.type')" min-width="150">
             <template #default="{ row }">{{ itemTypeLabel(row.itemType) }}</template>
           </el-table-column>
-          <el-table-column v-if="showItemNameColumn" :label="t('orderDetail.itemName')" min-width="180">
+          <el-table-column v-if="showItemNameColumn" :label="order.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderDetail.itemName')" min-width="180">
             <template #default="{ row }">{{ row.itemName || '-' }}</template>
           </el-table-column>
           <el-table-column :label="t('ordersPage.region')" min-width="150">
@@ -84,6 +130,12 @@
           </el-table-column>
           <el-table-column :label="t('ordersPage.quantity')" width="110" align="right">
             <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('ordersPage.completedQuantity')" width="120" align="right">
+            <template #default="{ row }">{{ valueOrDash(row.completedQuantity) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('ordersPage.unfinishedQuantity')" width="120" align="right">
+            <template #default="{ row }">{{ row.completedQuantity === null ? '-' : (row.quantity || 0) - row.completedQuantity }}</template>
           </el-table-column>
           <el-table-column :label="t('orderDetail.unitPrice')" width="130" align="right">
             <template #default="{ row }">{{ row.unitPrice === null ? '-' : money(row.unitPrice) }}</template>
@@ -94,44 +146,32 @@
         </el-table>
       </section>
 
-      <section v-if="order.commentDetails?.length" class="detail-card">
-        <h2>{{ t('orderDetail.commentDetails') }}</h2>
-        <el-table :data="order.commentDetails" class="detail-table">
+      <section v-if="order.reviewAttachments?.length" class="detail-card">
+        <h2>{{ t('orderCreate.reviewAttachments') }}</h2>
+        <el-table :data="order.reviewAttachments" class="detail-table">
           <el-table-column :label="t('ordersPage.region')" min-width="150">
             <template #default="{ row }">{{ detailRegionLabel(row.regionCode) }}</template>
           </el-table-column>
-          <el-table-column :label="t('orderCreate.starLevel')" width="110" align="center">
-            <template #default="{ row }">{{ row.starLevel }}</template>
-          </el-table-column>
-          <el-table-column :label="t('orderCreate.reviewTitle')" min-width="180">
-            <template #default="{ row }">{{ row.commentTitle }}</template>
-          </el-table-column>
-          <el-table-column :label="t('orderCreate.reviewContent')" min-width="260">
-            <template #default="{ row }">{{ row.commentContent }}</template>
+          <el-table-column :label="t('orderCreate.reviewAttachments')" min-width="260">
+            <template #default="{ row }"><el-button link type="primary" @click="downloadReviewAttachment(row, false, order.customerId)">{{ row.fileName }}</el-button></template>
           </el-table-column>
         </el-table>
       </section>
 
-      <section class="detail-card">
-        <h2>{{ t('orderDetail.timeline') }}</h2>
-        <div class="timeline-grid">
-          <div v-for="item in timelineItems" :key="item.label" class="timeline-item">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </div>
-        </div>
-      </section>
+
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
+import { downloadReviewAttachment } from '@/api/reviewAttachments'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Download, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Download, Edit, Refresh } from '@element-plus/icons-vue'
 import { getCustomerOrder, type Order, type OrderStatus, type OrderType } from '@/api/orders'
+import { getCustomerSpecialAudit, type SpecialOrderAudit } from '@/api/specialOrderAudits'
 import { getEnabledRegions, type MarketRegion, type StoreType } from '@/api/applications'
 import { exportOrderDetailExcel } from '@/utils/orderDetailExport'
 
@@ -140,6 +180,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 
 const order = ref<Order | null>(null)
+const sourceAudit = ref<SpecialOrderAudit | null>(null)
 const regions = ref<MarketRegion[]>([])
 const loading = ref(false)
 const exporting = ref(false)
@@ -163,14 +204,28 @@ const displayUnitPrice = computed(() => {
 })
 const timelineItems = computed(() => {
   if (!order.value) return []
-  return [
-    { label: t('ordersPage.createdAt'), value: formatDateTime(order.value.createdAt) },
-    { label: t('orderDetail.confirmedAt'), value: formatDateTime(order.value.confirmedAt) },
-    { label: t('orderDetail.executedAt'), value: formatDateTime(order.value.executedAt) },
-    { label: t('orderDetail.completedAt'), value: formatDateTime(order.value.completedAt) }
-  ]
-})
 
+  const mainFlow = [
+    { key: 'created', label: t('ordersPage.createdAt'), value: formatDateTime(order.value.createdAt) },
+    { key: 'confirmed', label: t('orderDetail.confirmedAt'), value: formatDateTime(order.value.confirmedAt) },
+    { key: 'executed', label: t('orderDetail.executedAt'), value: formatDateTime(order.value.executedAt) }
+  ].filter((item) => item.value !== '-')
+
+  const operationFlow = (order.value.events || [])
+    .slice()
+    .sort((left, right) => left.id - right.id)
+    .map((event) => ({
+      key: 'event-' + event.id,
+      label: orderEventLabel(event),
+      value: formatDateTime(event.createdAt)
+    }))
+
+  const completionFlow = order.value.completedAt
+    ? [{ key: 'completed', label: t('orderDetail.completedAt'), value: formatDateTime(order.value.completedAt) }]
+    : []
+
+  return [...mainFlow, ...operationFlow, ...completionFlow]
+})
 onMounted(() => {
   loadRegions()
   loadOrder()
@@ -181,6 +236,14 @@ async function loadOrder() {
   loading.value = true
   try {
     order.value = await getCustomerOrder(orderId.value)
+    sourceAudit.value = null
+    if (order.value.sourceAuditId) {
+      try {
+        sourceAudit.value = await getCustomerSpecialAudit(order.value.sourceAuditId)
+      } catch {
+        sourceAudit.value = null
+      }
+    }
   } catch {
     ElMessage.error(t('orderDetail.loadFailed'))
   } finally {
@@ -198,6 +261,11 @@ async function loadRegions() {
 
 function goBack() {
   router.back()
+}
+
+function editOrder() {
+  if (!order.value || order.value.status !== 'PENDING_CONFIRM' || order.value.sourceAuditId) return
+  router.push({ name: 'user-order-create', query: { orderId: String(order.value.id) } })
 }
 
 async function handleExportDetail() {
@@ -229,6 +297,10 @@ function typeLabel(type?: OrderType | null) {
   return type ? t(`ordersPage.types.${type}`) : '-'
 }
 
+function orderTypeLabel(value: Order) {
+  return value.orderModuleName?.trim() || typeLabel(value.orderType)
+}
+
 function itemTypeLabel(type?: string | null) {
   return type ? t(`ordersPage.itemTypes.${type}`) : '-'
 }
@@ -253,6 +325,35 @@ function statusTagType(status?: OrderStatus | null) {
   return 'info'
 }
 
+function orderEventLabel(event: Order['events'][number]) {
+  if (event.eventType === 'PAUSED') return t('orderDetail.events.paused')
+  if (event.eventType === 'RESUMED') return t('orderDetail.events.resumed')
+  if (event.eventType === 'UPDATED') {
+    const changes: string[] = []
+    if (event.quantityBefore !== null && event.quantityAfter !== null) {
+      changes.push(t('orderDetail.events.quantityChanged', {
+        before: event.quantityBefore,
+        after: event.quantityAfter
+      }))
+    }
+    if (event.completedAfter !== null) {
+      changes.push(event.completedBefore !== null
+        ? t('orderDetail.events.completedChanged', {
+            before: event.completedBefore,
+            after: event.completedAfter
+          })
+        : t('orderDetail.events.completedRecorded', { value: event.completedAfter }))
+    }
+    if (event.amountBefore !== null && event.amountAfter !== null) {
+      changes.push(t('orderDetail.events.amountChanged', {
+        before: Number(event.amountBefore).toFixed(2),
+        after: Number(event.amountAfter).toFixed(2)
+      }))
+    }
+    return t('orderDetail.events.updatedSummary', { changes: changes.join('，') })
+  }
+  return event.eventType
+}
 function formatDateTime(value?: string | null) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-'
 }
@@ -268,7 +369,7 @@ function valueOrDash(value?: number | null) {
 
 <style scoped>
 .order-detail-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .detail-toolbar {
@@ -279,7 +380,7 @@ function valueOrDash(value?: number | null) {
 
 .hero-card,
 .detail-card {
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -310,8 +411,8 @@ function valueOrDash(value?: number | null) {
   justify-content: center;
   overflow: hidden;
   border-radius: 12px;
-  background: #eef4ff;
-  color: #2f7df4;
+  background: #eff6ff;
+  color: #2563eb;
   font-size: 22px;
   font-weight: 800;
 }
@@ -334,7 +435,7 @@ function valueOrDash(value?: number | null) {
 }
 
 .app-copy > span {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -348,8 +449,8 @@ function valueOrDash(value?: number | null) {
   height: 22px;
   padding: 0 8px;
   border-radius: 4px;
-  background: #eef4ff;
-  color: #175cd3;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-size: 12px;
   line-height: 22px;
 }
@@ -363,7 +464,7 @@ function valueOrDash(value?: number | null) {
 }
 
 .order-status span {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -401,7 +502,7 @@ function valueOrDash(value?: number | null) {
 
 .info-list dt {
   margin-bottom: 5px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -413,6 +514,13 @@ function valueOrDash(value?: number | null) {
   white-space: nowrap;
 }
 
+.info-list dd.contact-value {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+  user-select: text;
+}
+
 .amount-card {
   display: flex;
   flex-direction: column;
@@ -420,22 +528,22 @@ function valueOrDash(value?: number | null) {
 
 .amount-summary {
   padding: 14px 16px;
-  border: 1px solid #d7e7ff;
+  border: 1px solid #dbeafe;
   border-radius: 8px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+  background: linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%);
 }
 
 .amount-summary span,
 .fee-metrics span {
   display: block;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
 .amount-summary strong {
   display: block;
   margin-top: 8px;
-  color: #1677ff;
+  color: #2563eb;
   font-size: 30px;
   font-weight: 800;
   line-height: 1.1;
@@ -451,7 +559,7 @@ function valueOrDash(value?: number | null) {
 .fee-metrics div {
   min-width: 0;
   padding: 12px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #f8fafc;
 }
@@ -460,7 +568,7 @@ function valueOrDash(value?: number | null) {
   display: block;
   margin-top: 6px;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 16px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -473,7 +581,7 @@ function valueOrDash(value?: number | null) {
 
 .detail-table :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
 }
 
 .timeline-grid {
@@ -492,7 +600,7 @@ function valueOrDash(value?: number | null) {
 .timeline-item span {
   display: block;
   margin-bottom: 6px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 

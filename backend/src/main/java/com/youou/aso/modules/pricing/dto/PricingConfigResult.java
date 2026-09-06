@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 public record PricingConfigResult(
         PriceCode code,
         BigDecimal unitPrice,
+        BigDecimal chinaUnitPrice,
         boolean enabled
 ) {
 }

@@ -10,6 +10,7 @@ public class OrderItem {
     private String itemName;
     private String regionCode;
     private Integer quantity;
+    private Integer completedQuantity;
     private BigDecimal unitPrice;
     private BigDecimal amount;
     private String metadataJson;
@@ -61,6 +62,14 @@ public class OrderItem {
 
     public void setQuantity(Integer quantity) {
         this.quantity = quantity;
+    }
+
+    public Integer getCompletedQuantity() {
+        return completedQuantity;
+    }
+
+    public void setCompletedQuantity(Integer completedQuantity) {
+        this.completedQuantity = completedQuantity;
     }
 
     public BigDecimal getUnitPrice() {

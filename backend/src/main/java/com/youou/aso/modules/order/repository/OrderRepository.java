@@ -12,6 +12,10 @@ public interface OrderRepository {
 
     Optional<AsoOrder> findById(Long id);
 
+    default Optional<AsoOrder> findByIdForUpdate(Long id) {
+        return findById(id);
+    }
+
     AsoOrder update(AsoOrder order);
 
     AsoOrder updatePaymentDraft(AsoOrder order);
@@ -36,5 +40,5 @@ public interface OrderRepository {
         return findAll(query).size();
     }
 
-    List<AsoOrder> findExecutingDueBefore(LocalDateTime now);
+    List<AsoOrder> findDueBefore(LocalDateTime now);
 }

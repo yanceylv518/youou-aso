@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 public class PricingConfig {
     private PriceCode code;
     private BigDecimal unitPrice;
+    private BigDecimal chinaUnitPrice;
     private boolean enabled;
     private LocalDateTime updatedAt;
 
@@ -13,6 +14,7 @@ public class PricingConfig {
         PricingConfig config = new PricingConfig();
         config.setCode(code);
         config.setUnitPrice(unitPrice);
+        config.setChinaUnitPrice(unitPrice);
         config.setEnabled(true);
         return config;
     }
@@ -33,6 +35,13 @@ public class PricingConfig {
         this.unitPrice = unitPrice;
     }
 
+    public BigDecimal getChinaUnitPrice() {
+        return chinaUnitPrice;
+    }
+
+    public void setChinaUnitPrice(BigDecimal chinaUnitPrice) {
+        this.chinaUnitPrice = chinaUnitPrice;
+    }
     public boolean isEnabled() {
         return enabled;
     }

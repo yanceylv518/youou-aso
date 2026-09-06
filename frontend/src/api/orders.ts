@@ -1,8 +1,9 @@
+import { listReviewAttachments, type ReviewAttachment } from './reviewAttachments'
 import { http, type ApiResponse, type PageResult } from './http'
 import type { StoreType } from './applications'
 import type { SpecialOrderAudit } from './specialOrderAudits'
 
-export type OrderType = 'KEYWORD_INSTALL' | 'DOWNLOAD' | 'RATING' | 'REVIEW' | 'RANK_GUARANTEE' | 'KEYWORD_COVERAGE'
+export type OrderType = 'KEYWORD_INSTALL' | 'DOWNLOAD' | 'RATING' | 'REVIEW' | 'RANK_GUARANTEE' | 'CHART_RANK_GUARANTEE' | 'KEYWORD_COVERAGE'
 export type OrderStatus =
   | 'PENDING_PAYMENT'
   | 'PENDING_CONFIRM'
@@ -14,15 +15,29 @@ export type OrderStatus =
 export type OrderListStatus = OrderStatus | 'PENDING_REVIEW' | 'APPROVED_WAIT_SUBMIT' | 'SUBMITTED'
 
 export interface OrderItem {
+  id: number
   itemType: string
   itemName: string | null
   regionCode: string | null
   quantity: number | null
+  completedQuantity: number | null
   unitPrice: number | null
   amount: number | null
   metadataJson: string | null
 }
 
+export interface OrderEvent {
+  id: number
+  eventType: 'PAUSED' | 'UPDATED' | 'RESUMED' | string
+  quantityBefore: number | null
+  quantityAfter: number | null
+  completedBefore: number | null
+  completedAfter: number | null
+  amountBefore: number | null
+  amountAfter: number | null
+  createdByAdminId: number | null
+  createdAt: string
+}
 export interface OrderCommentDetail {
   regionCode: string
   starLevel: number
@@ -39,6 +54,8 @@ export interface Order {
   customerAppId: number
   sourceAuditId: number | null
   orderType: OrderType
+  orderModuleId: number | null
+  orderModuleName: string | null
   storeType: StoreType
   regionCode: string
   appIdentifier: string
@@ -52,13 +69,16 @@ export interface Order {
   quantity: number | null
   unitPrice: number | null
   totalAmount: number
+  refundAmount?: number | null
   expectedCompletedAt: string | null
   confirmedAt: string | null
   executedAt: string | null
   completedAt: string | null
   createdAt: string | null
   items: OrderItem[]
+  reviewAttachments?: ReviewAttachment[]
   commentDetails: OrderCommentDetail[]
+  events: OrderEvent[]
 }
 
 export interface OrderQuery {
@@ -97,6 +117,7 @@ export interface CreateOrderPayload {
     rating5Count?: number | null
     rating4Count?: number | null
     review5Count?: number | null
+    attachmentIds?: string[]
     review4Count?: number | null
   }>
   reviewDetails?: OrderCommentDetail[]
@@ -105,6 +126,7 @@ export interface CreateOrderPayload {
   rating4Count?: number | null
   review5Count?: number | null
   review4Count?: number | null
+  orderModuleId?: number | null
 }
 
 export interface AdminCreateOrderPayload extends CreateOrderPayload {
@@ -116,6 +138,8 @@ export interface AdminCreateOrderPayload extends CreateOrderPayload {
     keyword: string
     targetRank?: number | null
     coverageNote?: string | null
+    unitPrice?: number | null
+    executionDays?: number | null
   }>
   specialAmount?: number | null
 }
@@ -139,7 +163,9 @@ export async function getCustomerOrdersPage(params: OrderQuery) {
 
 export async function getCustomerOrder(id: number) {
   const response = await http.get<ApiResponse<Order>>(`/customer/orders/${id}`)
-  return response.data.data
+  const order = response.data.data
+  order.reviewAttachments = order.orderType === 'REVIEW' ? await listReviewAttachments(id, false) : []
+  return order
 }
 
 export async function createCustomerOrder(payload: CreateOrderPayload) {
@@ -149,6 +175,11 @@ export async function createCustomerOrder(payload: CreateOrderPayload) {
 
 export async function resubmitCustomerOrder(id: number, payload: CreateOrderPayload) {
   const response = await http.post<ApiResponse<Order>>(`/customer/orders/${id}/resubmit`, payload)
+  return response.data.data
+}
+
+export async function payCustomerOrder(id: number) {
+  const response = await http.post<ApiResponse<Order>>(`/customer/orders/${id}/pay`)
   return response.data.data
 }
 
@@ -169,7 +200,9 @@ export async function getAdminOrdersPage(params: OrderQuery) {
 
 export async function getAdminOrder(id: number) {
   const response = await http.get<ApiResponse<Order>>(`/admin/orders/${id}`)
-  return response.data.data
+  const order = response.data.data
+  order.reviewAttachments = order.orderType === 'REVIEW' ? await listReviewAttachments(id, true) : []
+  return order
 }
 
 export async function confirmAdminOrder(id: number) {
@@ -189,6 +222,11 @@ export async function executeAdminOrder(id: number) {
 
 export async function pauseAdminOrder(id: number) {
   const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/pause`)
+  return response.data.data
+}
+
+export async function updatePausedAdminOrder(id: number, items: Array<{ itemId: number; quantity: number; completedQuantity: number }>) {
+  const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/paused-items`, { items })
   return response.data.data
 }
 

@@ -74,6 +74,17 @@ public class CustomerSpecialOrderAuditController {
         )));
     }
 
+    @GetMapping("/{id}")
+    public ApiResponse<SpecialOrderAuditResult> detail(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id
+    ) {
+        ensureCustomer(account);
+        return ApiResponse.ok(SpecialOrderAuditResult.from(
+                specialOrderAuditService.getCustomerAudit(account.accountId(), id)
+        ));
+    }
+
     @PostMapping("/{id}/submit")
     public ApiResponse<OrderResult> submitApproved(
             @AuthenticationPrincipal AuthenticatedAccount account,

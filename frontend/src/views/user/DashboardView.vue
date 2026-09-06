@@ -1,10 +1,16 @@
 <template>
   <section class="dashboard-page">
-    <header class="page-header">
-      <p class="page-note">{{ t('dashboard.userSubtitle') }}</p>
-      <el-button :icon="Refresh" :loading="loading" @click="loadDashboard">
+    <header class="page-header dashboard-hero">
+      <div class="hero-copy">
+        <span class="hero-eyebrow">{{ t('dashboard.userEyebrow') }}</span>
+        <h1>{{ t('dashboard.userTitle', { name: displayName }) }}</h1>
+        <p class="page-note">{{ t('dashboard.userSubtitle') }}</p>
+      </div>
+      <el-button class="hero-refresh" :icon="Refresh" :loading="loading" @click="loadDashboard">
         {{ t('ordersPage.refresh') }}
       </el-button>
+      <i class="hero-glow hero-glow-one" />
+      <i class="hero-glow hero-glow-two" />
     </header>
 
     <div v-loading="loading" class="metric-grid">
@@ -120,11 +126,13 @@ import {
 } from '@/api/wallet'
 import { useWalletTransactionTypeLabels } from '@/composables/useWalletTransactionTypeLabels'
 import { useWalletStore } from '@/stores/wallet'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const router = useRouter()
 const { loadTransactionTypeConfigs, transactionTypeLabel } = useWalletTransactionTypeLabels('customer')
 const walletStore = useWalletStore()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const apps = ref<CustomerApp[]>([])
@@ -132,6 +140,7 @@ const orders = ref<Order[]>([])
 const transactions = ref<WalletTransaction[]>([])
 
 const walletBalance = computed(() => walletStore.balance)
+const displayName = computed(() => authStore.username || '')
 const pendingOrderCount = computed(() => orders.value.filter((order) => order.status === 'PENDING_CONFIRM').length)
 const executingOrderCount = computed(() => orders.value.filter((order) => order.status === 'EXECUTING').length)
 const recentOrders = computed(() => orders.value.slice(0, 6))
@@ -141,23 +150,22 @@ onMounted(loadDashboard)
 
 async function loadDashboard() {
   loading.value = true
-  try {
-    const [walletResult, appResult, orderResult, transactionResult] = await Promise.all([
-      getCustomerWallet(),
-      getCustomerApps(),
-      getCustomerOrders(),
-      getCustomerWalletTransactions(10),
-      loadTransactionTypeConfigs()
-    ])
-    walletStore.setOverview(walletResult)
-    apps.value = appResult
-    orders.value = orderResult
-    transactions.value = transactionResult
-  } catch {
+  const results = await Promise.allSettled([
+    getCustomerWallet(),
+    getCustomerApps(),
+    getCustomerOrders(),
+    getCustomerWalletTransactions(10),
+    loadTransactionTypeConfigs()
+  ])
+  const [walletResult, appResult, orderResult, transactionResult] = results
+  if (walletResult.status === 'fulfilled') walletStore.setOverview(walletResult.value)
+  if (appResult.status === 'fulfilled') apps.value = appResult.value
+  if (orderResult.status === 'fulfilled') orders.value = orderResult.value
+  if (transactionResult.status === 'fulfilled') transactions.value = transactionResult.value
+  if (results.some((result) => result.status === 'rejected')) {
     ElMessage.error(t('dashboard.loadFailed'))
-  } finally {
-    loading.value = false
   }
+  loading.value = false
 }
 
 function orderStatusTag(status: OrderStatus) {
@@ -184,7 +192,7 @@ function formatDate(value: string | undefined | null) {
 
 <style scoped>
 .dashboard-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .page-header,
@@ -207,7 +215,7 @@ p {
 .page-note {
   max-width: 720px;
   margin: 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.6;
 }
 
@@ -224,7 +232,7 @@ p {
   align-items: center;
   gap: 14px;
   padding: 18px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 14px 32px rgb(16 24 40 / 5%);
@@ -247,7 +255,7 @@ p {
 
 .metric-card p {
   margin: 0 0 7px;
-  color: #667085;
+  color: #64748b;
 }
 
 .metric-card strong {
@@ -255,23 +263,23 @@ p {
 }
 
 .accent-blue .metric-icon {
-  background: #dbe8ff;
-  color: #2f7df4;
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .accent-green .metric-icon {
-  background: #d9f5e6;
-  color: #37bd78;
+  background: #f0fdf4;
+  color: #16a34a;
 }
 
 .accent-orange .metric-icon {
-  background: #ffedcf;
-  color: #f5a11c;
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .accent-purple .metric-icon {
-  background: #e7ddff;
-  color: #7657d8;
+  background: #f5f3ff;
+  color: #7c3aed;
 }
 
 .quick-actions {
@@ -290,7 +298,7 @@ p {
 .panel {
   min-width: 0;
   padding: 18px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -312,7 +320,7 @@ p {
 
 .panel :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
 }
 

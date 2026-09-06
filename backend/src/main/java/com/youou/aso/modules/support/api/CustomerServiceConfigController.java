@@ -55,6 +55,17 @@ public class CustomerServiceConfigController {
                 request.serviceName(),
                 request.qrCodeUrl(),
                 request.contactHint(),
+                request.email(),
+                request.emailVisible(),
+                request.phone(),
+                request.phoneVisible(),
+                request.teamsUrl(),
+                request.telegramUrl(),
+                request.telegramQrUrl(),
+                request.telegramQrVisible(),
+                request.wechatQrUrl(),
+                request.wechatQrVisible(),
+                request.whatsappUrl(),
                 request.enabled()
         )));
     }
@@ -75,7 +86,49 @@ public class CustomerServiceConfigController {
             @Size(max = 512)
             String contactHint,
 
+            @Size(max = 254)
+            String email,
+
+            boolean emailVisible,
+
+            @Size(max = 40)
+            String phone,
+
+            boolean phoneVisible,
+
+            @Size(max = 1024)
+            String teamsUrl,
+
+            @Size(max = 1024)
+            String telegramUrl,
+
+            @Size(max = 1024)
+            String telegramQrUrl,
+
+            boolean telegramQrVisible,
+
+            @Size(max = 1024)
+            String wechatQrUrl,
+
+            boolean wechatQrVisible,
+
+            @Size(max = 1024)
+            String whatsappUrl,
+
             boolean enabled
     ) {
+        public CustomerServiceConfigRequest(
+                String serviceName,
+                String qrCodeUrl,
+                String contactHint,
+                String email,
+                String teamsUrl,
+                String telegramUrl,
+                String whatsappUrl,
+                boolean enabled
+        ) {
+            this(serviceName, qrCodeUrl, contactHint, email, email != null && !email.isBlank(), null, false,
+                    teamsUrl, telegramUrl, null, false, null, false, whatsappUrl, enabled);
+        }
     }
 }

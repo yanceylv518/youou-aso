@@ -38,7 +38,9 @@
 
     <div class="table-card">
       <el-table v-loading="loading" class="transaction-table" :data="transactions" :empty-text="t('wallet.empty')">
-        <el-table-column prop="transactionNo" :label="t('wallet.transactionNo')" min-width="170" />
+        <el-table-column :label="t('wallet.transactionNo')" min-width="170">
+          <template #default="{ row }"><span class="data-id">{{ row.transactionNo }}</span></template>
+        </el-table-column>
         <el-table-column :label="t('wallet.type')" min-width="140">
           <template #default="{ row }">
             {{ transactionTypeLabel(row.transactionType) }}
@@ -46,7 +48,7 @@
         </el-table-column>
         <el-table-column :label="t('wallet.relatedOrder')" min-width="190">
           <template #default="{ row }">
-            {{ row.orderNo || '-' }}
+            <span class="related-id">{{ row.orderNo || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.orderType')" min-width="140">
@@ -63,12 +65,12 @@
         </el-table-column>
         <el-table-column :label="t('wallet.amount')" width="140" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.amount) }}
+            <span class="money-value" :class="row.direction === 'CREDIT' ? 'is-credit' : 'is-debit'">{{ formatMoney(row.amount) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.balanceAfter')" width="150" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.balanceAfter) }}
+            <span class="balance-value">{{ formatMoney(row.balanceAfter) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.createdAt')" min-width="170">
@@ -193,7 +195,7 @@ function orderTypeLabel(orderType?: string | null) {
 
 <style scoped>
 .wallet-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .filter-panel {
@@ -227,7 +229,7 @@ function orderTypeLabel(orderType?: string | null) {
 
 .table-card {
   overflow: hidden;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -243,7 +245,7 @@ function orderTypeLabel(orderType?: string | null) {
 
 .transaction-table :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
 }
 

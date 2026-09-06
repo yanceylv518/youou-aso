@@ -11,6 +11,7 @@ import com.youou.aso.modules.account.repository.AdminAccountRepository;
 import com.youou.aso.modules.account.repository.CustomerAccountRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -72,6 +73,26 @@ public class AdminAccountService {
         AdminAccount updated = adminAccountRepository.findById(adminId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         return toResult(updated);
+    }
+
+    public List<Long> getPermissions(Long adminId) {
+        AdminAccount admin = adminAccountRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (AdminRole.SUPER_ADMIN.equals(admin.getRoleCode())) {
+            return adminPermissionService.listMenus().stream().map(menu -> menu.id()).toList();
+        }
+        return adminPermissionService.findMenuIdsByAdminId(adminId);
+    }
+
+    @Transactional
+    public List<Long> updatePermissions(Long adminId, List<Long> menuIds) {
+        AdminAccount admin = adminAccountRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        if (AdminRole.SUPER_ADMIN.equals(admin.getRoleCode())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        adminPermissionService.replaceAdminMenus(adminId, menuIds);
+        return adminPermissionService.findMenuIdsByAdminId(adminId);
     }
 
     public AdminAccountResult updateStatus(Long operatorAdminId, Long adminId, AccountStatus status) {

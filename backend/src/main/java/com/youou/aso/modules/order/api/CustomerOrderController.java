@@ -102,7 +102,16 @@ public class CustomerOrderController {
             @Valid @RequestBody CreateOrderRequest request
     ) {
         ensureCustomer(account);
-        return ApiResponse.ok(OrderResult.from(orderService.resubmitPendingPaymentOrder(account.accountId(), id, toCommand(request))));
+        return ApiResponse.ok(OrderResult.from(orderService.resubmitEditableOrder(account.accountId(), id, toCommand(request))));
+    }
+
+    @PostMapping("/{id}/pay")
+    public ApiResponse<OrderResult> pay(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id
+    ) {
+        ensureCustomer(account);
+        return ApiResponse.ok(OrderResult.from(orderService.payPendingPaymentOrder(account.accountId(), id)));
     }
 
     private CreateOrderCommand toCommand(CreateOrderRequest request) {
@@ -121,7 +130,8 @@ public class CustomerOrderController {
                 request.rating5Count(),
                 request.rating4Count(),
                 request.review5Count(),
-                request.review4Count()
+                request.review4Count(),
+                request.orderModuleId()
         );
     }
 
@@ -164,7 +174,8 @@ public class CustomerOrderController {
             Integer rating5Count,
             Integer rating4Count,
             Integer review5Count,
-            Integer review4Count
+            Integer review4Count,
+            Long orderModuleId
     ) {
     }
 }

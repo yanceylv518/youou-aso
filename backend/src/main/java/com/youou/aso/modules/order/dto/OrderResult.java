@@ -19,6 +19,8 @@ public record OrderResult(
         Long customerAppId,
         Long sourceAuditId,
         OrderType orderType,
+        Long orderModuleId,
+        String orderModuleName,
         StoreType storeType,
         String regionCode,
         String appIdentifier,
@@ -32,13 +34,15 @@ public record OrderResult(
         Integer quantity,
         BigDecimal unitPrice,
         BigDecimal totalAmount,
+        BigDecimal refundAmount,
         LocalDateTime expectedCompletedAt,
         LocalDateTime confirmedAt,
         LocalDateTime executedAt,
         LocalDateTime completedAt,
         LocalDateTime createdAt,
         List<OrderItemResult> items,
-        List<OrderCommentDetailResult> commentDetails
+        List<OrderCommentDetailResult> commentDetails,
+        List<OrderEventResult> events
 ) {
     public static OrderResult from(AsoOrder order) {
         return new OrderResult(
@@ -50,6 +54,8 @@ public record OrderResult(
                 order.getCustomerAppId(),
                 order.getSourceAuditId(),
                 order.getOrderType(),
+                order.getOrderModuleId(),
+                order.getOrderModuleName(),
                 order.getStoreType(),
                 order.getRegionCode(),
                 order.getAppIdentifier(),
@@ -63,13 +69,15 @@ public record OrderResult(
                 order.getQuantity(),
                 order.getUnitPrice(),
                 order.getTotalAmount(),
+                order.getRefundAmount(),
                 order.getExpectedCompletedAt(),
                 order.getConfirmedAt(),
                 order.getExecutedAt(),
                 order.getCompletedAt(),
                 order.getCreatedAt(),
                 order.getItems().stream().map(OrderItemResult::from).toList(),
-                order.getCommentDetails().stream().map(OrderCommentDetailResult::from).toList()
+                List.of(),
+                order.getEvents().stream().map(OrderEventResult::from).toList()
         );
     }
 }

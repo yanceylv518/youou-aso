@@ -60,6 +60,14 @@ public class AdminPermissionService {
         adminPermissionRepository.replaceAdminRoles(adminId, roleIds);
     }
 
+    public List<Long> findMenuIdsByAdminId(Long adminId) {
+        return adminPermissionRepository.findMenuIdsByAdminId(adminId);
+    }
+
+    public void replaceAdminMenus(Long adminId, List<Long> menuIds) {
+        adminPermissionRepository.replaceAdminMenus(adminId, menuIds == null ? List.of() : menuIds);
+    }
+
     public AdminAccessResult accessForAdmin(Long adminId, String roleCode) {
         if (AdminRole.SUPER_ADMIN.name().equals(roleCode)) {
             List<AdminMenuResult> menus = adminPermissionRepository.findAllMenus();

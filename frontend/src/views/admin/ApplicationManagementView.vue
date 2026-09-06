@@ -115,8 +115,8 @@
       />
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="t('applications.addApp')" width="720px" @closed="resetDialog">
-      <el-form class="add-app-form" label-position="right" label-width="96px" @submit.prevent>
+    <el-dialog append-to-body v-model="dialogVisible" :title="t('applications.addApp')" width="720px" @closed="resetDialog">
+      <el-form class="add-app-form" label-position="right" label-width="116px" @submit.prevent>
         <el-form-item :label="t('orderCreate.customer')">
           <el-select
             v-model="form.customerId"
@@ -155,6 +155,8 @@
             v-model="form.regionCode"
             class="add-app-control"
             filterable
+            :filter-method="filterRegions"
+            @visible-change="handleRegionDropdownVisibility"
             :loading="regionLoading"
             :placeholder="t('applications.selectRegion')"
           >
@@ -164,14 +166,15 @@
               </span>
             </template>
             <el-option
-              v-for="region in regions"
+              v-for="region in prioritizedRegions"
               :key="region.code"
-              :label="locale.startsWith('zh') ? region.nameZh : region.nameEn"
+              :label="regionOptionLabel(region)"
               :value="region.code"
             >
               <span class="option-row">
                 <span class="flag-icon"><img :src="flagUrl(region.code)" :alt="region.code" /></span>
-                {{ locale.startsWith('zh') ? region.nameZh : region.nameEn }}
+                <strong>{{ region.code }}</strong>
+                <span>{{ locale.startsWith('zh') ? region.nameZh : region.nameEn }}</span>
               </span>
             </el-option>
           </el-select>
@@ -334,6 +337,8 @@ const optionApps = ref<CustomerApp[]>([])
 const customerList = ref<CustomerAccount[]>([])
 const allRegions = ref<MarketRegion[]>([])
 const regions = ref<MarketRegion[]>([])
+const regionSearchQuery = ref('')
+const prioritizedRegions = computed(() => prioritizeRegions(regions.value, regionSearchQuery.value))
 const searchResults = ref<StoreAppSearchResult[]>([])
 const selectedApp = ref<StoreAppSearchResult | null>(null)
 const hasSearched = ref(false)
@@ -713,6 +718,39 @@ function customerName(customer: CustomerAccount) {
   return customer.username || t('ordersPage.customerIdShort', { id: customer.id })
 }
 
+function regionOptionLabel(region: MarketRegion) {
+  const name = locale.value.startsWith('zh') ? region.nameZh : region.nameEn
+  return `${region.code} · ${name}`
+}
+
+function filterRegions(query: string) {
+  regionSearchQuery.value = query.trim().toLocaleLowerCase()
+}
+
+function handleRegionDropdownVisibility(visible: boolean) {
+  if (!visible) regionSearchQuery.value = ''
+}
+
+function prioritizeRegions(list: MarketRegion[], query: string) {
+  if (!query) return list
+  return list
+    .map((region, index) => ({ region, index, score: regionSearchScore(region, query) }))
+    .filter((item) => item.score < 99)
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .map((item) => item.region)
+}
+
+function regionSearchScore(region: MarketRegion, query: string) {
+  const code = region.code.toLocaleLowerCase()
+  if (code === query) return 0
+  if (code.startsWith(query)) return 1
+  if (code.includes(query)) return 2
+  const names = [region.nameZh, region.nameEn].map((name) => name.toLocaleLowerCase())
+  if (names.some((name) => name.startsWith(query))) return 3
+  if (names.some((name) => name.includes(query))) return 4
+  return 99
+}
+
 function flagUrl(code: string) {
   return `https://flagcdn.com/24x18/${code.toLowerCase()}.png`
 }
@@ -754,7 +792,7 @@ watch(
 
 <style scoped>
 .app-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .table-toolbar {
@@ -782,7 +820,7 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #182230;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 600;
 }
@@ -837,17 +875,17 @@ watch(
 }
 
 .search-button {
-  background: #ff7a1a;
-  border-color: #ff7a1a;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .search-button:hover {
-  background: #f26f0d;
-  border-color: #f26f0d;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .clear-button {
-  color: #344054;
+  color: #334155;
 }
 
 .app-table {
@@ -857,7 +895,7 @@ watch(
 
 .app-table :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
   font-weight: 600;
 }
 
@@ -889,8 +927,8 @@ watch(
   place-items: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #eef6ff;
-  color: #2d7dd2;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -910,12 +948,12 @@ watch(
 
 .muted {
   margin-top: 4px;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
 .danger-icon {
-  color: #f04438;
+  color: #dc2626;
 }
 
 .customer-cell {
@@ -930,12 +968,12 @@ watch(
 }
 
 .customer-cell strong {
-  color: #182230;
+  color: #0f172a;
 }
 
 .customer-cell span,
 .customer-option small {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -971,7 +1009,7 @@ watch(
 }
 
 .input-search-button:hover {
-  color: #2d7dd2;
+  color: #2563eb;
 }
 
 .input-search-button:disabled {
@@ -983,7 +1021,7 @@ watch(
   width: 14px;
   height: 14px;
   border: 2px solid #d0d5dd;
-  border-top-color: #2d7dd2;
+  border-top-color: #2563eb;
   border-radius: 999px;
   animation: spin 0.8s linear infinite;
 }
@@ -1009,8 +1047,8 @@ watch(
   place-items: center;
   overflow: hidden;
   border-radius: 10px;
-  background: #e6f1ff;
-  color: #2d7dd2;
+  background: #dbeafe;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -1027,8 +1065,8 @@ watch(
 }
 
 .icon-preview:hover:not(:disabled) {
-  border-color: #409eff;
-  background: #eef6ff;
+  border-color: #2563eb;
+  background: #eff6ff;
 }
 
 .icon-preview:focus-visible {
@@ -1051,7 +1089,7 @@ watch(
 
 .icon-upload-placeholder {
   font-size: 22px;
-  color: #2d7dd2;
+  color: #2563eb;
 }
 
 .result-main {
@@ -1070,7 +1108,7 @@ watch(
 
 .result-main span,
 .result-id {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -1082,7 +1120,7 @@ watch(
 }
 
 .icon-upload-tip {
-  color: #f04438;
+  color: #dc2626;
   font-size: 13px;
 }
 
@@ -1113,18 +1151,18 @@ watch(
   border: 1px solid #d7e0ea;
   border-radius: 8px;
   background: #ffffff;
-  color: #182230;
+  color: #0f172a;
   cursor: pointer;
   text-align: left;
 }
 
 .result-item:hover {
-  border-color: #2d7dd2;
+  border-color: #2563eb;
   background: #f3f8ff;
 }
 
 .result-category {
-  color: #344054;
+  color: #334155;
   font-size: 13px;
 }
 
@@ -1147,8 +1185,8 @@ watch(
   place-items: center;
   overflow: hidden;
   border-radius: 10px;
-  background: #e6f1ff;
-  color: #2d7dd2;
+  background: #dbeafe;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -1165,7 +1203,7 @@ watch(
 }
 
 .selected-label {
-  color: #2d7dd2;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1180,7 +1218,7 @@ watch(
 
 .selected-main span,
 .selected-id {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -1190,7 +1228,7 @@ watch(
 
 .dialog-tip {
   margin: 0;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
   line-height: 1.7;
 }

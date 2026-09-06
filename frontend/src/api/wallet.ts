@@ -55,6 +55,9 @@ export interface WalletTransactionTypeConfig {
   transactionType: WalletTransactionType
   displayNameZh: string
   displayNameEn: string
+  displayNameRu: string
+  displayNamePt: string
+  displayNameEs: string
   updatedAt: string | null
 }
 
@@ -75,6 +78,9 @@ export interface UpdateWalletTransactionTypeConfigPayload {
     transactionType: WalletTransactionType
     displayNameZh: string
     displayNameEn: string
+    displayNameRu: string
+    displayNamePt: string
+    displayNameEs: string
   }>
 }
 

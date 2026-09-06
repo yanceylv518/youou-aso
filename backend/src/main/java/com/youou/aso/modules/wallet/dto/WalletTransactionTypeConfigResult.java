@@ -9,6 +9,9 @@ public record WalletTransactionTypeConfigResult(
         WalletTransactionType transactionType,
         String displayNameZh,
         String displayNameEn,
+        String displayNameRu,
+        String displayNamePt,
+        String displayNameEs,
         LocalDateTime updatedAt
 ) {
     public static WalletTransactionTypeConfigResult from(WalletTransactionTypeConfig config) {
@@ -16,6 +19,9 @@ public record WalletTransactionTypeConfigResult(
                 config.getTransactionType(),
                 config.getDisplayNameZh(),
                 config.getDisplayNameEn(),
+                config.getDisplayNameRu(),
+                config.getDisplayNamePt(),
+                config.getDisplayNameEs(),
                 config.getUpdatedAt()
         );
     }

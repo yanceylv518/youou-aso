@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="order-create-page">
     <div class="order-shell">
       <el-form label-position="top" class="order-form">
@@ -14,20 +14,31 @@
                 <h2><span>* 1.</span> {{ t('orderCreate.serviceSection') }}</h2>
               </div>
               <div class="type-tabs">
-                <el-tabs v-model="form.orderType">
+                <el-tabs v-model="selectedOrderModuleTab">
                   <el-tab-pane
-                    v-for="service in services"
-                    :key="service.code"
-                    :name="service.code"
+                    v-for="module in availableOrderModules"
+                    :key="module.id"
+                    :name="String(module.id)"
                   >
                     <template #label>
                       <span class="tab-label">
-                        <component :is="service.icon" class="tab-icon" />
-                        {{ typeLabel(service.code) }}
+                        <component :is="moduleIcon(module.orderType)" class="tab-icon" />
+                        {{ moduleLocalizedName(module) }}
                       </span>
                     </template>
                   </el-tab-pane>
                 </el-tabs>
+              </div>
+
+              <div v-if="selectedOrderModule" class="selected-module-card">
+                <span class="selected-module-marker" aria-hidden="true"></span>
+                <div class="selected-module-content">
+                  <span class="selected-module-label">{{ t('orderCreate.selectedModule') }}</span>
+                  <strong>{{ moduleLocalizedName(selectedOrderModule) }}</strong>
+                  <p v-if="moduleLocalizedDescription(selectedOrderModule)">
+                    {{ moduleLocalizedDescription(selectedOrderModule) }}
+                  </p>
+                </div>
               </div>
             </section>
 
@@ -88,6 +99,8 @@
                 <el-select
                   v-model="form.regionCode"
                   filterable
+                  :filter-method="filterRegions"
+                  @visible-change="handleRegionDropdownVisibility"
                   :placeholder="t('applications.selectRegion')"
                   :disabled="selectedAppRegionCodes.length === 0"
                 >
@@ -97,14 +110,15 @@
                     </span>
                   </template>
                   <el-option
-                    v-for="region in selectedAppRegions"
+                    v-for="region in prioritizedSelectedAppRegions"
                     :key="region.code"
-                    :label="regionLabel(region.code)"
+                    :label="regionSearchLabel(region.code)"
                     :value="region.code"
                   >
                     <span class="option-row">
                       <span class="flag-icon"><img :src="flagUrl(region.code)" :alt="region.code" /></span>
-                      {{ regionLabel(region.code) }}
+                      <strong>{{ region.code }}</strong>
+                      <span>{{ regionLabel(region.code) }}</span>
                     </span>
                   </el-option>
                 </el-select>
@@ -179,6 +193,8 @@
                         <el-select
                           v-model="group.regionCode"
                           filterable
+                          :filter-method="filterRegions"
+                          @visible-change="handleRegionDropdownVisibility"
                           :placeholder="t('orderCreate.selectCountryRegion')"
                           :disabled="selectedAppRegionCodes.length === 0"
                         >
@@ -190,12 +206,13 @@
                           <el-option
                             v-for="region in availableRegionsForGroup(groupIndex)"
                             :key="region.code"
-                            :label="regionLabel(region.code)"
+                            :label="regionSearchLabel(region.code)"
                             :value="region.code"
                           >
                             <span class="option-row">
                               <span class="flag-icon"><img :src="flagUrl(region.code)" :alt="region.code" /></span>
-                              {{ regionLabel(region.code) }}
+                              <strong>{{ region.code }}</strong>
+                              <span>{{ regionLabel(region.code) }}</span>
                             </span>
                           </el-option>
                         </el-select>
@@ -273,7 +290,7 @@
                   </div>
                 </div>
               </div>
-              <el-button type="primary" :icon="Plus" class="add-region-button keyword-add-region-button" @click="addRegionGroup">
+              <el-button type="primary" :icon="Plus" class="add-region-button keyword-add-region-button" v-if="!hasChinaRegionSelection" @click="addRegionGroup">
                 {{ t('orderCreate.addRegionConfig') }}
               </el-button>
             </section>
@@ -293,6 +310,14 @@
                   }}
                 </h2>
               </div>
+              <input
+                v-if="form.orderType === 'REVIEW'"
+                ref="reviewImportInput"
+                class="visually-hidden-file"
+                type="file"
+                accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                @change="handleReviewImport"
+              />
               <div class="task-panel">
                 <div
                   v-if="['DOWNLOAD', 'RATING', 'REVIEW'].includes(form.orderType)"
@@ -305,6 +330,8 @@
                         <el-select
                           v-model="group.regionCode"
                           filterable
+                          :filter-method="filterRegions"
+                          @visible-change="handleRegionDropdownVisibility"
                           :placeholder="t('orderCreate.selectCountryRegion')"
                           :disabled="selectedAppRegionCodes.length === 0"
                         >
@@ -316,12 +343,13 @@
                           <el-option
                             v-for="region in availableRegionsForGroup(groupIndex)"
                             :key="region.code"
-                            :label="regionLabel(region.code)"
+                            :label="regionSearchLabel(region.code)"
                             :value="region.code"
                           >
                             <span class="option-row">
                               <span class="flag-icon"><img :src="flagUrl(region.code)" :alt="region.code" /></span>
-                              {{ regionLabel(region.code) }}
+                              <strong>{{ region.code }}</strong>
+                              <span>{{ regionLabel(region.code) }}</span>
                             </span>
                           </el-option>
                         </el-select>
@@ -337,17 +365,25 @@
                         >
                           {{ t('orderCreate.removeRegionGroup') }}
                         </el-button>
+                        <template v-if="form.orderType === 'REVIEW'">
+                          <el-button size="small" type="primary" :icon="Download" @click="downloadReviewTemplate">
+                            {{ t('orderCreate.downloadReviewTemplate') }}
+                          </el-button>
+                          <el-button size="small" type="success" :icon="Plus" :loading="reviewUploading" @click="openReviewImport(groupIndex)">
+                            {{ t('orderCreate.importReviewContent') }}
+                          </el-button>
+                        </template>
                       </div>
                     </div>
 
                     <div
-                      v-if="form.orderType !== 'REVIEW'"
+
                       class="region-metric-table"
                       :class="form.orderType === 'DOWNLOAD' ? 'region-metric-table-download' : 'region-metric-table-score'"
                     >
                       <div class="region-metric-head">
                         <span v-if="form.orderType === 'DOWNLOAD'">{{ t('orderCreate.dailyDownloadCount') }}</span>
-                        <template v-else-if="form.orderType === 'RATING'">
+                        <template v-else-if="['RATING', 'REVIEW'].includes(form.orderType)">
                           <span>{{ t('orderCreate.rating5Count') }}</span>
                           <span>{{ t('orderCreate.rating4Count') }}</span>
                         </template>
@@ -357,59 +393,28 @@
                         <div v-if="form.orderType === 'DOWNLOAD'" class="region-metric-cell">
                           <el-input-number v-model="group.dailyDownloadCount" :min="1" :step="1" />
                         </div>
-                        <template v-else-if="form.orderType === 'RATING'">
+                        <template v-else-if="['RATING', 'REVIEW'].includes(form.orderType)">
                           <div class="region-metric-cell">
-                            <el-input-number v-model="group.rating5Count" :min="0" :step="1" />
+                            <el-input-number v-model="group[form.orderType === 'REVIEW' ? 'review5Count' : 'rating5Count']" :min="0" :step="1" :precision="0" />
                           </div>
                           <div class="region-metric-cell">
-                            <el-input-number v-model="group.rating4Count" :min="0" :step="1" />
+                            <el-input-number v-model="group[form.orderType === 'REVIEW' ? 'review4Count' : 'rating4Count']" :min="0" :step="1" :precision="0" />
                           </div>
                         </template>
                         <div class="region-metric-cell region-metric-empty-cell"></div>
                       </div>
                     </div>
 
-                    <div v-else class="review-detail-table">
-                      <div class="review-detail-head">
-                        <span>{{ t('orderCreate.starLevel') }}</span>
-                        <span>{{ t('orderCreate.reviewTitle') }}</span>
-                        <span>{{ t('orderCreate.reviewContent') }}</span>
-                        <span>{{ t('applications.actions') }}</span>
-                        <span></span>
-                      </div>
-                      <div v-for="(item, index) in group.reviewItems" :key="index" class="review-detail-row">
-                        <el-select v-model="item.starLevel" :placeholder="t('orderCreate.starLevel')">
-                          <el-option :label="t('orderCreate.review5Count')" :value="5" />
-                          <el-option :label="t('orderCreate.review4Count')" :value="4" />
-                        </el-select>
-                        <el-input v-model.trim="item.commentTitle" maxlength="120" :placeholder="t('orderCreate.reviewTitlePlaceholder')" />
-                        <el-input v-model.trim="item.commentContent" maxlength="1000" :placeholder="t('orderCreate.reviewContentPlaceholder')" />
-                        <div class="review-action-cell">
-                          <el-button
-                            type="danger"
-                            text
-                            :icon="Delete"
-                            :disabled="group.reviewItems.length === 1"
-                            @click="removeReviewItem(groupIndex, index)"
-                          />
-                        </div>
-                        <div class="review-empty-cell">
-                          <el-button
-                            v-if="index === 0"
-                            size="small"
-                            text
-                            :icon="Plus"
-                            class="review-add-button"
-                            :disabled="!canAddReviewItem(group)"
-                            @click="addReviewItem(groupIndex)"
-                          >
-                            {{ t('orderCreate.addReview') }}
-                          </el-button>
-                        </div>
+                    <div v-if="form.orderType === 'REVIEW'" class="review-attachments">
+                      <p>{{ t('orderCreate.reviewAttachmentHint') }}</p>
+                      <div v-for="(file, index) in group.reviewAttachments" :key="file.id" class="review-attachment-row">
+                        <el-button link type="primary" @click="downloadReviewAttachment(file, false, undefined)">{{ file.fileName }}</el-button>
+                        <span v-if="file.fileSize">{{ (file.fileSize / 1024).toFixed(1) }} KB</span>
+                        <el-button link type="danger" @click="group.reviewAttachments.splice(index, 1)">{{ t('orderCreate.removeAttachment') }}</el-button>
                       </div>
                     </div>
                   </div>
-                  <el-button type="primary" :icon="Plus" class="add-region-button metric-add-region-button" @click="addRegionGroup">
+                  <el-button type="primary" :icon="Plus" class="add-region-button metric-add-region-button" v-if="!hasChinaRegionSelection" @click="addRegionGroup">
                     {{ t('orderCreate.addRegionConfig') }}
                   </el-button>
                 </div>
@@ -423,6 +428,8 @@
                           <el-select
                             v-model="group.regionCode"
                             filterable
+                            :filter-method="filterRegions"
+                            @visible-change="handleRegionDropdownVisibility"
                             :placeholder="t('orderCreate.selectCountryRegion')"
                             :disabled="selectedAppRegionCodes.length === 0"
                           >
@@ -434,12 +441,13 @@
                             <el-option
                               v-for="region in availableSpecialRegionsForGroup(groupIndex)"
                               :key="region.code"
-                              :label="regionLabel(region.code)"
+                              :label="regionSearchLabel(region.code)"
                               :value="region.code"
                             >
                               <span class="option-row">
                                 <span class="flag-icon"><img :src="flagUrl(region.code)" :alt="region.code" /></span>
-                                {{ regionLabel(region.code) }}
+                                <strong>{{ region.code }}</strong>
+                                <span>{{ regionLabel(region.code) }}</span>
                               </span>
                             </el-option>
                           </el-select>
@@ -460,15 +468,16 @@
                       </div>
                       <div class="special-item-table">
                         <div class="special-item-head">
-                          <span>{{ t('orderCreate.keywords') }}</span>
-                          <span>{{ form.orderType === 'RANK_GUARANTEE' ? t('orderCreate.targetRank') : t('orderCreate.currentRank') }}</span>
+                          <span>{{ form.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keywords') }}</span>
+                          <span>{{ isRankGuaranteeType(form.orderType) ? t('orderCreate.targetRank') : t('orderCreate.currentRank') }}</span>
                           <span>{{ t('applications.actions') }}</span>
                           <span></span>
                         </div>
                         <div v-for="(item, index) in group.items" :key="index" class="special-item-row">
-                          <el-input v-model.trim="item.keyword" maxlength="255" :placeholder="t('orderCreate.keywordPlaceholder')" />
+                          <el-input v-if="form.orderType === 'CHART_RANK_GUARANTEE'" v-model.trim="item.chartType" maxlength="255" :placeholder="t('orderCreate.chartTypePlaceholder')" />
+                          <el-input v-else v-model.trim="item.keyword" maxlength="255" :placeholder="t('orderCreate.keywordPlaceholder')" />
                           <el-select
-                            v-if="form.orderType === 'RANK_GUARANTEE'"
+                            v-if="isRankGuaranteeType(form.orderType)"
                             v-model="item.targetRank"
                             :placeholder="t('orderCreate.targetRankPlaceholder')"
                           >
@@ -505,14 +514,14 @@
                               :disabled="!canAddSpecialItem(group)"
                               @click="addSpecialItem(groupIndex)"
                             >
-                              {{ t('orderCreate.addKeyword') }}
+                              {{ form.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.addChartType') : t('orderCreate.addKeyword') }}
                             </el-button>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <el-button type="primary" :icon="Plus" class="add-region-button special-add-region-button" @click="addSpecialGroup">
+                  <el-button type="primary" :icon="Plus" class="add-region-button special-add-region-button"  v-if="!hasChinaRegionSelection" @click="addSpecialGroup">
                     {{ t('orderCreate.addRegionConfig') }}
                   </el-button>
                   <div class="contact-grid">
@@ -551,7 +560,7 @@
             <div class="summary-list">
               <div class="summary-item">
                 <span>{{ t('ordersPage.type') }}</span>
-                <strong>{{ typeLabel(form.orderType) }}</strong>
+                <strong>{{ selectedOrderModule ? moduleLocalizedName(selectedOrderModule) : typeLabel(form.orderType) }}</strong>
               </div>
               <div class="summary-item">
                 <span>{{ t('orderCreate.store') }}</span>
@@ -599,7 +608,7 @@
                 type="primary"
                 class="submit-button"
                 :loading="submitting"
-                :disabled="submitDisabled"
+                :disabled="submitDisabled || reviewUploading"
                 @click="submitOrder"
               >
                 {{ submitButtonText }}
@@ -609,7 +618,7 @@
         </div>
       </el-form>
     </div>
-    <el-dialog
+    <el-dialog append-to-body
       v-model="batchKeywordDialogVisible"
       :title="t('orderCreate.batchKeywordDialogTitle')"
       width="420px"
@@ -636,14 +645,16 @@
 </template>
 
 <script setup lang="ts">
+import { uploadReviewAttachment, downloadReviewAttachment, type ReviewAttachment } from '@/api/reviewAttachments'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ChatDotRound, Delete, Download, Grid, Lock, Plus, Search, Star } from '@element-plus/icons-vue'
+import { ArrowLeft, ChatDotRound, Delete, Download, Grid, Lock, Plus, Search, Star, Trophy } from '@element-plus/icons-vue'
 import { getCustomerApps, getEnabledRegions, type CustomerApp, type MarketRegion, type StoreType } from '@/api/applications'
-import { createCustomerOrder, getCustomerOrder, resubmitCustomerOrder, type CreateOrderPayload, type Order, type OrderType } from '@/api/orders'
-import { getCustomerPricingConfig, type PriceCode } from '@/api/pricing'
+import { createCustomerOrder, getCustomerOrder, payCustomerOrder, resubmitCustomerOrder, type CreateOrderPayload, type Order, type OrderType } from '@/api/orders'
+import { getCustomerPricingConfig, getCustomerOrderTypeRegionPricing, type OrderTypeRegionPricing, type PriceCode } from '@/api/pricing'
+import { getCustomerOrderModules, type OrderModuleConfig } from '@/api/orderModules'
 import { getCustomerSpecialAudits, submitSpecialAudit, type SpecialOrderAudit } from '@/api/specialOrderAudits'
 import StoreIcon from '@/components/StoreIcon.vue'
 import { useWalletStore } from '@/stores/wallet'
@@ -669,7 +680,7 @@ interface KeywordInput {
 interface RegionKeywordGroup {
   regionCode: string
   keywordItems: KeywordInput[]
-  reviewItems: ReviewInput[]
+  reviewAttachments: ReviewAttachment[]
   dailyDownloadCount: number | null
   rating5Count: number
   rating4Count: number
@@ -677,15 +688,10 @@ interface RegionKeywordGroup {
   review4Count: number
 }
 
-interface ReviewInput {
-  starLevel: 4 | 5
-  commentTitle: string
-  commentContent: string
-}
-
 interface SpecialKeywordInput {
   regionCode: string
   keyword: string
+  chartType: string
   targetRank: number | null
   coverageNote: string
 }
@@ -735,12 +741,20 @@ const hydratedOrderId = ref<number | null>(null)
 const hydratedRenewOrderId = ref<number | null>(null)
 const baseDataReady = ref(false)
 const originalPayloadSnapshot = ref<string | null>(null)
+const originalEditingStatus = ref<Order['status'] | null>(null)
 const keywordImportInput = ref<HTMLInputElement | null>(null)
+const reviewUploading = ref(false)
+const reviewImportInput = ref<HTMLInputElement | null>(null)
+const reviewImportGroupIndex = ref<number | null>(null)
 const batchKeywordDialogVisible = ref(false)
 const batchKeywordText = ref('')
 const batchKeywordGroupIndex = ref<number | null>(null)
 const apps = ref<CustomerApp[]>([])
 const regions = ref<MarketRegion[]>([])
+const orderModules = ref<OrderModuleConfig[]>([])
+const regionPricing = ref<OrderTypeRegionPricing[]>([])
+const selectedOrderModuleId = ref<number | null>(null)
+const regionSearchQuery = ref('')
 const regionCodeAliases: Record<string, string> = {
   UK: 'GB',
   RUSSIA: 'RU',
@@ -752,6 +766,14 @@ const keywordInstallDate = ref(today())
 const systemNow = ref(new Date())
 let systemTimer: number | undefined
 const priceMap = reactive<Record<PriceCode, number>>({
+  KEYWORD_INSTALL: 0,
+  DOWNLOAD: 0,
+  RATING_5: 0,
+  RATING_4: 0,
+  REVIEW_5: 0,
+  REVIEW_4: 0
+})
+const chinaPriceMap = reactive<Record<PriceCode, number>>({
   KEYWORD_INSTALL: 0,
   DOWNLOAD: 0,
   RATING_5: 0,
@@ -784,24 +806,60 @@ const services: ServiceOption[] = [
   { code: 'RATING', icon: Star },
   { code: 'REVIEW', icon: ChatDotRound },
   { code: 'RANK_GUARANTEE', icon: Lock, special: true },
+  { code: 'CHART_RANK_GUARANTEE', icon: Trophy, special: true },
   { code: 'KEYWORD_COVERAGE', icon: Grid, special: true }
 ]
 
 const filteredApps = computed(() => apps.value.filter((app) => app.storeType === form.storeType))
 const selectedApp = computed(() => filteredApps.value.find((app) => app.id === form.customerAppId) || null)
 const selectedAppRegions = computed(() => {
+  const allowed = regionPricing.value.find(item => item.orderType === form.orderType)?.allowedRegionCodes
   return regions.value
     .filter((region) => supportsStore(region, form.storeType))
+    .filter((region) => !allowed || allowed.includes(region.code))
 })
 const selectedAppRegionCodes = computed(() => {
   return selectedAppRegions.value
     .map((region) => region.code)
 })
+const prioritizedSelectedAppRegions = computed(() => prioritizeRegions(selectedAppRegions.value))
+
+function filterRegions(query: string) {
+  regionSearchQuery.value = query.trim().toLocaleLowerCase()
+}
+
+function handleRegionDropdownVisibility(visible: boolean) {
+  if (!visible) regionSearchQuery.value = ''
+}
+
+function prioritizeRegions(list: MarketRegion[]) {
+  const query = regionSearchQuery.value
+  if (!query) return list
+  return list
+    .map((region, index) => ({ region, index, score: regionSearchScore(region, query) }))
+    .filter((item) => item.score < 99)
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .map((item) => item.region)
+}
+
+function regionSearchScore(region: MarketRegion, query: string) {
+  const code = region.code.toLocaleLowerCase()
+  if (code === query) return 0
+  if (code.startsWith(query)) return 1
+  if (code.includes(query)) return 2
+  const names = [region.nameZh, region.nameEn].map((name) => name.toLocaleLowerCase())
+  if (names.some((name) => name.startsWith(query))) return 3
+  if (names.some((name) => name.includes(query))) return 4
+  return 99
+}
 function normalizeImportRegionCode(value: string) {
   const code = value.trim().toUpperCase()
   return regionCodeAliases[code] || code
 }
-const isSpecialOrder = computed(() => form.orderType === 'RANK_GUARANTEE' || form.orderType === 'KEYWORD_COVERAGE')
+function isRankGuaranteeType(value: OrderType | '') {
+  return value === 'RANK_GUARANTEE' || value === 'CHART_RANK_GUARANTEE'
+}
+const isSpecialOrder = computed(() => isRankGuaranteeType(form.orderType) || form.orderType === 'KEYWORD_COVERAGE')
 const keywordItems = computed(() => {
   const result = new Map<string, number>()
   form.regionGroups.forEach((group) => {
@@ -829,7 +887,8 @@ const regionItems = computed(() => {
       rating5Count: group.rating5Count,
       rating4Count: group.rating4Count,
       review5Count: group.review5Count,
-      review4Count: group.review4Count
+      review4Count: group.review4Count,
+      attachmentIds: group.reviewAttachments.map(file => file.id)
     }))
     .filter((item) => {
       if (form.orderType === 'DOWNLOAD') return Number(item.dailyDownloadCount || 0) > 0
@@ -838,33 +897,21 @@ const regionItems = computed(() => {
       return false
     })
 })
-const reviewDetails = computed(() => {
-  return form.regionGroups.flatMap((group) => {
-    if (!group.regionCode) return []
-    return group.reviewItems
-      .filter((item) => item.commentTitle.trim() && item.commentContent.trim())
-      .map((item) => ({
-        regionCode: group.regionCode,
-        starLevel: item.starLevel,
-        commentTitle: item.commentTitle.trim(),
-        commentContent: item.commentContent.trim()
-      }))
-  })
-})
 const specialItems = computed(() => {
   return form.specialGroups
     .flatMap((group) => group.items.map((item) => ({
       regionCode: group.regionCode,
       keyword: item.keyword.trim(),
-      targetRank: form.orderType === 'RANK_GUARANTEE' ? Number(item.targetRank || 0) : null,
+      chartType: item.chartType.trim(),
+      targetRank: isRankGuaranteeType(form.orderType) ? Number(item.targetRank || 0) : null,
       coverageNote: form.orderType === 'KEYWORD_COVERAGE' ? item.coverageNote.trim() : null
     })))
-    .filter((item) => item.regionCode && item.keyword)
+    .filter((item) => item.regionCode && (form.orderType === 'CHART_RANK_GUARANTEE' ? item.chartType : item.keyword))
     .map((item) => ({
       ...item,
       coverageNote: item.coverageNote || null
     }))
-    .filter((item) => form.orderType !== 'RANK_GUARANTEE' || Number(item.targetRank || 0) > 0)
+    .filter((item) => !isRankGuaranteeType(form.orderType) || Number(item.targetRank || 0) > 0)
 })
 const totalDailyDownloadCount = computed(() => {
   return regionItems.value.reduce((sum, item) => sum + Number(item.dailyDownloadCount || 0), 0)
@@ -876,10 +923,10 @@ const totalRating4Count = computed(() => {
   return regionItems.value.reduce((sum, item) => sum + Number(item.rating4Count || 0), 0)
 })
 const totalReview5Count = computed(() => {
-  return reviewDetails.value.filter((item) => item.starLevel === 5).length
+  return regionItems.value.reduce((sum, item) => sum + Number(item.review5Count || 0), 0)
 })
 const totalReview4Count = computed(() => {
-  return reviewDetails.value.filter((item) => item.starLevel === 4).length
+  return regionItems.value.reduce((sum, item) => sum + Number(item.review4Count || 0), 0)
 })
 const totalDays = computed(() => {
   if (!dateRange.value) return 0
@@ -896,29 +943,76 @@ const quantity = computed(() => {
   if (form.orderType === 'REVIEW') return totalReview5Count.value + totalReview4Count.value
   return 0
 })
+const selectedPricingRegionCodes = computed(() => form.regionGroups.map((group) => group.regionCode).filter(Boolean))
+const usesChinaPrice = computed(() => selectedPricingRegionCodes.value.includes('CN'))
+const availableOrderModules = computed(() => orderModules.value
+  .filter((module) => module.enabled)
+  .slice()
+  .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id))
+const selectedOrderModule = computed(() => orderModules.value.find((module) => module.id === selectedOrderModuleId.value && module.enabled && module.orderType === form.orderType) || null)
+const selectedOrderModuleTab = computed({
+  get: () => selectedOrderModuleId.value === null ? '' : String(selectedOrderModuleId.value),
+  set: (value: string) => {
+    const module = availableOrderModules.value.find((item) => item.id === Number(value))
+    if (!module) return
+    selectedOrderModuleId.value = module.id
+    form.orderType = module.orderType
+  }
+})
+function effectivePrice(code: PriceCode, regionCode = selectedPricingRegionCodes.value[0] || '') {
+  const override = regionPricing.value.find(item => item.orderType === form.orderType)?.regionPrices?.[code]?.[regionCode]
+  if (override !== undefined && override !== null) return Number(override)
+  if (selectedOrderModule.value && !isSpecialOrder.value) {
+    return Number(regionCode === 'CN' ? selectedOrderModule.value.chinaUnitPrice : selectedOrderModule.value.unitPrice) || 0
+  }
+  return regionCode === 'CN' ? chinaPriceMap[code] : priceMap[code]
+}
+function moduleLocalizedName(module: OrderModuleConfig) {
+  const lang = locale.value.toLowerCase()
+  if (lang.startsWith('en')) return module.moduleNameEn || module.moduleName
+  if (lang.startsWith('ru')) return module.moduleNameRu || module.moduleName
+  if (lang.startsWith('pt')) return module.moduleNamePt || module.moduleName
+  if (lang.startsWith('es')) return module.moduleNameEs || module.moduleName
+  return module.moduleName
+}
+function moduleLocalizedDescription(module: OrderModuleConfig) {
+  const lang = locale.value.toLowerCase()
+  if (lang.startsWith('en')) return module.moduleDescriptionEn || module.moduleDescription
+  if (lang.startsWith('ru')) return module.moduleDescriptionRu || module.moduleDescription
+  if (lang.startsWith('pt')) return module.moduleDescriptionPt || module.moduleDescription
+  if (lang.startsWith('es')) return module.moduleDescriptionEs || module.moduleDescription
+  return module.moduleDescription
+}
+function moduleIcon(orderType: OrderType) {
+  return services.find((service) => service.code === orderType)?.icon || Search
+}
+function ensureSelectedOrderModule() {
+  if (selectedOrderModule.value) return
+  selectedOrderModuleId.value = orderModules.value.find((module) => module.enabled && module.orderType === form.orderType)?.id || null
+}
 const estimatedAmount = computed(() => {
-  if (form.orderType === 'KEYWORD_INSTALL') return quantity.value * priceMap.KEYWORD_INSTALL
-  if (form.orderType === 'DOWNLOAD') return quantity.value * priceMap.DOWNLOAD
+  if (form.orderType === 'KEYWORD_INSTALL') return keywordItems.value.reduce((sum, item) => sum + item.quantity * effectivePrice('KEYWORD_INSTALL', item.regionCode), 0)
+  if (form.orderType === 'DOWNLOAD') return totalDays.value * regionItems.value.reduce((sum, item) => sum + Number(item.dailyDownloadCount || 0) * effectivePrice('DOWNLOAD', item.regionCode), 0)
   if (form.orderType === 'RATING') {
-    return totalDays.value * (totalRating5Count.value * priceMap.RATING_5 + totalRating4Count.value * priceMap.RATING_4)
+    return totalDays.value * regionItems.value.reduce((sum, item) => sum + Number(item.rating5Count || 0) * effectivePrice('RATING_5', item.regionCode) + Number(item.rating4Count || 0) * effectivePrice('RATING_4', item.regionCode), 0)
   }
   if (form.orderType === 'REVIEW') {
-    return totalReview5Count.value * priceMap.REVIEW_5 + totalReview4Count.value * priceMap.REVIEW_4
+    return regionItems.value.reduce((sum, item) => sum + Number(item.review5Count || 0) * effectivePrice('REVIEW_5', item.regionCode) + Number(item.review4Count || 0) * effectivePrice('REVIEW_4', item.regionCode), 0)
   }
   return 0
 })
 const billingLines = computed<BillingLine[]>(() => {
   if (form.orderType === 'KEYWORD_INSTALL') {
     return [{
-      label: t('ordersPage.types.KEYWORD_INSTALL'),
-      formula: `${t('orderCreate.keywordCount')} ${quantity.value} × ${t('orderCreate.unitPrice')} ${money(priceMap.KEYWORD_INSTALL)}`,
+      label: selectedOrderModule.value ? moduleLocalizedName(selectedOrderModule.value) : t('ordersPage.types.KEYWORD_INSTALL'),
+      formula: `${t('orderCreate.keywordCount')} ${quantity.value} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('KEYWORD_INSTALL'))}`,
       amount: money(estimatedAmount.value)
     }]
   }
   if (form.orderType === 'DOWNLOAD') {
     return [{
-      label: t('ordersPage.types.DOWNLOAD'),
-      formula: `${t('orderCreate.days')} ${totalDays.value} × ${t('orderCreate.dailyDownloadCount')} ${totalDailyDownloadCount.value || 0} × ${t('orderCreate.unitPrice')} ${money(priceMap.DOWNLOAD)}`,
+      label: selectedOrderModule.value ? moduleLocalizedName(selectedOrderModule.value) : t('ordersPage.types.DOWNLOAD'),
+      formula: `${t('orderCreate.days')} ${totalDays.value} × ${t('orderCreate.dailyDownloadCount')} ${totalDailyDownloadCount.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('DOWNLOAD'))}`,
       amount: money(estimatedAmount.value)
     }]
   }
@@ -926,13 +1020,13 @@ const billingLines = computed<BillingLine[]>(() => {
     return [
       {
         label: t('orderCreate.rating5Count'),
-        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(priceMap.RATING_5)}`,
-        amount: money(totalDays.value * (totalRating5Count.value || 0) * priceMap.RATING_5)
+        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('RATING_5'))}`,
+        amount: money(totalDays.value * (totalRating5Count.value || 0) * effectivePrice('RATING_5'))
       },
       {
         label: t('orderCreate.rating4Count'),
-        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(priceMap.RATING_4)}`,
-        amount: money(totalDays.value * (totalRating4Count.value || 0) * priceMap.RATING_4)
+        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('RATING_4'))}`,
+        amount: money(totalDays.value * (totalRating4Count.value || 0) * effectivePrice('RATING_4'))
       }
     ]
   }
@@ -940,13 +1034,13 @@ const billingLines = computed<BillingLine[]>(() => {
     return [
       {
         label: t('orderCreate.review5Count'),
-        formula: `${totalReview5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(priceMap.REVIEW_5)}`,
-        amount: money((totalReview5Count.value || 0) * priceMap.REVIEW_5)
+        formula: `${totalReview5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('REVIEW_5'))}`,
+        amount: money((totalReview5Count.value || 0) * effectivePrice('REVIEW_5'))
       },
       {
         label: t('orderCreate.review4Count'),
-        formula: `${totalReview4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(priceMap.REVIEW_4)}`,
-        amount: money((totalReview4Count.value || 0) * priceMap.REVIEW_4)
+        formula: `${totalReview4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('REVIEW_4'))}`,
+        amount: money((totalReview4Count.value || 0) * effectivePrice('REVIEW_4'))
       }
     ]
   }
@@ -966,7 +1060,7 @@ const systemTimeText = computed(() => formatSystemTime(systemNow.value))
 const isEditingOrder = computed(() => editingOrderId.value !== null || Number.isFinite(Number(route.query.orderId)))
 const submitButtonText = computed(() => {
   if (isSpecialOrder.value) return t('orderCreate.submitDemand')
-  return isEditingOrder.value ? t('orderCreate.submitChanges') : t('orderCreate.submit')
+  return isEditingOrder.value ? t('orderCreate.payAndSubmit') : t('orderCreate.submit')
 })
 
 onMounted(() => {
@@ -1015,6 +1109,7 @@ watch(
     if (hydratingOrder) return
     saveRegionGroupDraft(oldType)
     loadRegionGroupDraft(newType)
+    ensureSelectedOrderModule()
   }
 )
 
@@ -1022,18 +1117,24 @@ async function loadData() {
   loading.value = true
   baseDataReady.value = false
   try {
-    const [appList, regionList, pricingList] = await Promise.all([
+    const [appList, regionList, pricingList, regionPricingList, moduleList] = await Promise.all([
       getCustomerApps(),
       getEnabledRegions(),
-      getCustomerPricingConfig()
+      getCustomerPricingConfig(),
+      getCustomerOrderTypeRegionPricing(),
+      getCustomerOrderModules()
     ])
     apps.value = appList
     regions.value = regionList
+    regionPricing.value = regionPricingList
+    orderModules.value = moduleList
     pricingList.forEach((item) => {
       priceMap[item.code] = Number(item.unitPrice)
+      chinaPriceMap[item.code] = Number(item.chinaUnitPrice)
     })
     baseDataReady.value = true
     applyRouteQuery()
+    ensureSelectedOrderModule()
     await applyPendingOrderQuery()
     await applyRenewOrderQuery()
   } catch (error) {
@@ -1044,11 +1145,12 @@ async function loadData() {
 }
 
 async function submitOrder() {
+  if (reviewUploading.value) return
   if (!selectedApp.value || (!isSpecialOrder.value && !selectedOrderDates())) {
     ElMessage.warning(t('orderCreate.requiredFields'))
     return
   }
-  if (!isSpecialOrder.value && form.orderType !== 'KEYWORD_INSTALL' && form.orderType !== 'REVIEW' && regionItems.value.length === 0) {
+  if (!isSpecialOrder.value && form.orderType !== 'KEYWORD_INSTALL' && regionItems.value.length === 0) {
     ElMessage.warning(t('orderCreate.requiredFields'))
     return
   }
@@ -1091,22 +1193,30 @@ async function submitOrder() {
     ElMessage.warning(t('orderCreate.requiredFields'))
     return
   }
-  if (editingOrderId.value && originalPayloadSnapshot.value === serializeOrderPayload(payload)) {
-    ElMessage.warning(t('orderCreate.noChangesToSubmit'))
-    return
-  }
-
   submitting.value = true
   try {
-    const order = editingOrderId.value
-      ? await resubmitCustomerOrder(editingOrderId.value, payload)
+    const editingId = editingOrderId.value
+    const payloadSnapshot = serializeOrderPayload(payload)
+    if (editingId && originalEditingStatus.value === 'PENDING_CONFIRM' && payloadSnapshot === originalPayloadSnapshot.value) {
+      await router.push(orderListRoute(form.storeType))
+      return
+    }
+    const order = editingId
+      ? payloadSnapshot === originalPayloadSnapshot.value
+        ? await payCustomerOrder(editingId)
+        : await resubmitCustomerOrder(editingId, payload)
       : await createCustomerOrder(payload)
-    if (order.status === 'PENDING_PAYMENT') {
+    // Read the committed state before showing payment feedback. This also avoids
+    // presenting an intermediate response as a failed payment.
+    const committedOrder = editingId ? await getCustomerOrder(order.id) : order
+    await refreshWalletSilently()
+    if (committedOrder.status === 'PENDING_PAYMENT') {
       ElMessage.warning(t('orderCreate.balanceNotEnough'))
     } else {
-      ElMessage.success(t('orderCreate.createSuccess'))
+      ElMessage.success(editingOrderId.value
+        ? originalEditingStatus.value === 'PENDING_CONFIRM' ? t('ordersPage.updateSuccess') : t('ordersPage.paySuccess')
+        : t('orderCreate.createSuccess'))
     }
-    await refreshWalletSilently()
     await router.push(orderListRoute(form.storeType))
   } catch (error) {
     ElMessage.error(errorMessage(error, t('orderCreate.createFailed')))
@@ -1143,13 +1253,14 @@ function buildCustomerOrderPayload(): CreateOrderPayload | null {
     customerAppId: selectedApp.value.id,
     regionCode: form.orderType === 'KEYWORD_INSTALL' ? null : regionItems.value[0]?.regionCode || null,
     orderType: form.orderType,
+    orderModuleId: selectedOrderModule.value?.id || null,
     startDate,
     endDate,
     executionHours: form.orderType === 'KEYWORD_INSTALL' ? form.executionHours : null,
     keywords: [],
     keywordItems: form.orderType === 'KEYWORD_INSTALL' ? keywordItems.value : [],
-    regionItems: form.orderType === 'KEYWORD_INSTALL' || form.orderType === 'REVIEW' ? [] : regionItems.value,
-    reviewDetails: form.orderType === 'REVIEW' ? reviewDetails.value : [],
+    regionItems: form.orderType === 'KEYWORD_INSTALL' ? [] : regionItems.value,
+    reviewDetails: [],
     dailyDownloadCount: null,
     rating5Count: null,
     rating4Count: null,
@@ -1166,7 +1277,7 @@ function createRegionGroup(regionCode = ''): RegionKeywordGroup {
   return {
     regionCode,
     keywordItems: [{ keyword: '', quantity: null }],
-    reviewItems: [createReviewItem()],
+    reviewAttachments: [],
     dailyDownloadCount: null,
     rating5Count: 0,
     rating4Count: 0,
@@ -1175,18 +1286,11 @@ function createRegionGroup(regionCode = ''): RegionKeywordGroup {
   }
 }
 
-function createReviewItem(): ReviewInput {
-  return {
-    starLevel: 5,
-    commentTitle: '',
-    commentContent: ''
-  }
-}
-
 function createSpecialItem(): SpecialKeywordInput {
   return {
     regionCode: '',
     keyword: '',
+    chartType: '',
     targetRank: 1,
     coverageNote: ''
   }
@@ -1210,7 +1314,7 @@ function cloneRegionGroup(group: RegionKeywordGroup): RegionKeywordGroup {
   return {
     regionCode: group.regionCode,
     keywordItems: group.keywordItems.map((item) => ({ ...item })),
-    reviewItems: group.reviewItems.map((item) => ({ ...item })),
+    reviewAttachments: [...group.reviewAttachments],
     dailyDownloadCount: group.dailyDownloadCount,
     rating5Count: group.rating5Count,
     rating4Count: group.rating4Count,
@@ -1231,6 +1335,18 @@ function saveRegionGroupDraft(orderType: OrderType) {
 function loadRegionGroupDraft(orderType: OrderType) {
   if (!usesRegionGroups(orderType)) return
   form.regionGroups = cloneRegionGroups(regionGroupDrafts[orderType])
+  clearUnsupportedMainlandRegions(orderType)
+}
+
+function excludesMainlandChina(orderType: OrderType = form.orderType) {
+  return orderType === 'RATING' || orderType === 'REVIEW'
+}
+
+function clearUnsupportedMainlandRegions(orderType: OrderType = form.orderType) {
+  if (!excludesMainlandChina(orderType)) return
+  form.regionGroups.forEach((group) => {
+    if (group.regionCode === 'CN') group.regionCode = ''
+  })
 }
 
 function availableRegionsForGroup(groupIndex: number) {
@@ -1240,9 +1356,13 @@ function availableRegionsForGroup(groupIndex: number) {
       .map((group, index) => index === groupIndex ? '' : group.regionCode)
       .filter(Boolean)
   )
-  return selectedAppRegions.value.filter((region) => {
-    return region.code === currentRegionCode || !usedRegionCodes.has(region.code)
-  })
+  return prioritizeRegions(selectedAppRegions.value.filter((region) => {
+    if (excludesMainlandChina() && region.code === 'CN') return false
+    if (region.code === currentRegionCode) return true
+    if (usedRegionCodes.has('CN')) return false
+    if (region.code === 'CN' && usedRegionCodes.size > 0) return false
+    return !usedRegionCodes.has(region.code)
+  }))
 }
 
 function availableSpecialRegionsForGroup(groupIndex: number) {
@@ -1252,11 +1372,18 @@ function availableSpecialRegionsForGroup(groupIndex: number) {
       .map((group, index) => index === groupIndex ? '' : group.regionCode)
       .filter(Boolean)
   )
-  return selectedAppRegions.value.filter((region) => {
-    return region.code === currentRegionCode || !usedRegionCodes.has(region.code)
-  })
+  return prioritizeRegions(selectedAppRegions.value.filter((region) => {
+    if (region.code === currentRegionCode) return true
+    if (usedRegionCodes.has('CN')) return false
+    if (region.code === 'CN' && usedRegionCodes.size > 0) return false
+    return !usedRegionCodes.has(region.code)
+  }))
 }
 
+const hasChinaRegionSelection = computed(() =>
+  form.regionGroups.some((group) => group.regionCode === 'CN')
+  || form.specialGroups.some((group) => group.regionCode === 'CN')
+)
 function addRegionGroup() {
   form.regionGroups.push(createRegionGroup())
 }
@@ -1394,7 +1521,7 @@ async function handleKeywordImport(event: Event) {
     return
   }
   try {
-    const rows = isCsv ? parseCsv(await readTextFile(file)) : await readKeywordExcelRows(file)
+    const rows = isCsv ? parseCsv(await readTextFile(file)) : await readExcelRows(file, 3)
     importKeywordRows(rows)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('orderCreate.keywordImportReadFailed'))
@@ -1444,18 +1571,86 @@ function importKeywordRows(importRows: string[][]) {
   ElMessage.success(t('orderCreate.keywordImportSuccess', { count: dataRows.length }))
 }
 
-async function readKeywordExcelRows(file: File) {
+async function downloadReviewTemplate() {
+  const workbook = await createExcelWorkbook()
+  workbook.creator = 'Youou-ASO'
+  workbook.created = new Date()
+  const sheet = workbook.addWorksheet('Review Import')
+  sheet.columns = [
+    { header: t('orderCreate.reviewTitle'), key: 'reviewTitle', width: 32 },
+    { header: t('orderCreate.reviewContent'), key: 'reviewContent', width: 56 }
+  ]
+  sheet.getRow(1).font = { bold: true }
+  sheet.addRow({
+    reviewTitle: t('orderCreate.reviewTemplateExampleTitle'),
+    reviewContent: t('orderCreate.reviewTemplateExampleContent')
+  })
+  sheet.addRow({
+    reviewTitle: t('orderCreate.reviewTemplateExampleTitle2'),
+    reviewContent: t('orderCreate.reviewTemplateExampleContent2')
+  })
+  const buffer = await workbook.xlsx.writeBuffer()
+  downloadBlobFile(
+    t('orderCreate.reviewTemplateFilename'),
+    new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  )
+}
+
+function openReviewImport(groupIndex: number) {
+  if (form.orderType !== 'REVIEW') return
+  if (!selectedApp.value) {
+    ElMessage.warning(t('orderCreate.selectApp'))
+    return
+  }
+  const group = form.regionGroups[groupIndex]
+  if (!group?.regionCode) {
+    ElMessage.warning(t('orderCreate.reviewImportSelectRegion'))
+    return
+  }
+  reviewImportGroupIndex.value = groupIndex
+  reviewImportInput.value?.click()
+}
+
+async function handleReviewImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  const index = reviewImportGroupIndex.value
+  const group = index === null ? undefined : form.regionGroups[index]
+  if (!file || !group) return
+  if (reviewUploading.value) return
+  if (!selectedApp.value) {
+    ElMessage.warning(t('orderCreate.selectApp'))
+    return
+  }
+  if (!/\.(xlsx|csv)$/i.test(file.name) || !file.size || file.size > 20 * 1024 * 1024 || group.reviewAttachments.length >= 20) {
+    ElMessage.warning(t('orderCreate.reviewAttachmentLimit'))
+    return
+  }
+  const appId = selectedApp.value.id
+  const regionCode = group.regionCode
+  reviewUploading.value = true
+  try {
+    const attachment = await uploadReviewAttachment(file, false, undefined)
+    if (form.customerAppId !== appId || form.orderType !== 'REVIEW'
+      || group.regionCode !== regionCode || !form.regionGroups.includes(group)) return
+    group.reviewAttachments.push(attachment)
+    regionGroupDrafts.REVIEW = cloneRegionGroups(form.regionGroups)
+  } catch (error) {
+    ElMessage.error(errorMessage(error, t('orderCreate.reviewImportReadFailed')))
+  } finally {
+    reviewUploading.value = false
+  }
+}
+
+async function readExcelRows(file: File, columnCount: number) {
   const workbook = await createExcelWorkbook()
   await workbook.xlsx.load(await file.arrayBuffer())
   const sheet = workbook.worksheets[0]
   if (!sheet) return []
   const rows: string[][] = []
   sheet.eachRow({ includeEmpty: false }, (row) => {
-    rows.push([
-      excelCellText(row.getCell(1).value),
-      excelCellText(row.getCell(2).value),
-      excelCellText(row.getCell(3).value)
-    ])
+    rows.push(Array.from({ length: columnCount }, (_, index) => excelCellText(row.getCell(index + 1).value)))
   })
   return rows
 }
@@ -1536,29 +1731,6 @@ function downloadBlobFile(filename: string, blob: Blob) {
   URL.revokeObjectURL(url)
 }
 
-function addReviewItem(groupIndex: number) {
-  const group = form.regionGroups[groupIndex]
-  if (!group) return
-  if (!canAddReviewItem(group)) {
-    ElMessage.warning(t('orderCreate.reviewItemRequired'))
-    return
-  }
-  group.reviewItems.unshift(createReviewItem())
-}
-
-function canAddReviewItem(group: RegionKeywordGroup | undefined) {
-  const firstItem = group?.reviewItems[0]
-  return Boolean(firstItem?.starLevel)
-    && Boolean(firstItem?.commentTitle?.trim())
-    && Boolean(firstItem?.commentContent?.trim())
-}
-
-function removeReviewItem(groupIndex: number, index: number) {
-  const group = form.regionGroups[groupIndex]
-  if (!group || group.reviewItems.length <= 1) return
-  group.reviewItems.splice(index, 1)
-}
-
 function addSpecialGroup() {
   form.specialGroups.push(createSpecialGroup())
 }
@@ -1580,8 +1752,9 @@ function addSpecialItem(groupIndex: number) {
 
 function canAddSpecialItem(group: SpecialRegionGroup | undefined) {
   const firstItem = group?.items[0]
-  if (!firstItem?.keyword?.trim()) return false
-  if (form.orderType === 'RANK_GUARANTEE') return Number(firstItem.targetRank || 0) > 0
+  if (!firstItem) return false
+  if (!(form.orderType === 'CHART_RANK_GUARANTEE' ? firstItem.chartType.trim() : firstItem.keyword.trim())) return false
+  if (isRankGuaranteeType(form.orderType)) return Number(firstItem.targetRank || 0) > 0
   return true
 }
 
@@ -1612,6 +1785,13 @@ function applyRouteQuery() {
     form.orderType = queryOrderType
   }
 
+  const queryOrderModuleId = Number(route.query.orderModuleId)
+  if (Number.isFinite(queryOrderModuleId) && orderModules.value.some((module) => module.id === queryOrderModuleId && module.enabled && module.orderType === form.orderType)) {
+    selectedOrderModuleId.value = queryOrderModuleId
+  } else {
+    ensureSelectedOrderModule()
+  }
+
   const queryAppId = Number(route.query.appId)
   if (Number.isFinite(queryAppId)) {
     const app = apps.value.find((candidate) => candidate.id === queryAppId)
@@ -1629,6 +1809,7 @@ async function applyPendingOrderQuery() {
     editingOrderId.value = null
     hydratedOrderId.value = null
     originalPayloadSnapshot.value = null
+    originalEditingStatus.value = null
     return
   }
   if (!baseDataReady.value) {
@@ -1639,8 +1820,8 @@ async function applyPendingOrderQuery() {
   }
   try {
     const order = await getCustomerOrder(queryOrderId)
-    if (order.status !== 'PENDING_PAYMENT' || order.sourceAuditId) {
-      ElMessage.warning(t('ordersPage.onlyPendingPaymentEditable'))
+    if (!['PENDING_PAYMENT', 'PENDING_CONFIRM'].includes(order.status) || order.sourceAuditId) {
+      ElMessage.warning(t('ordersPage.onlyUnconfirmedEditable'))
       editingOrderId.value = null
       hydratedOrderId.value = null
       originalPayloadSnapshot.value = null
@@ -1648,6 +1829,7 @@ async function applyPendingOrderQuery() {
     }
     hydratePendingPaymentOrder(order)
     editingOrderId.value = order.id
+    originalEditingStatus.value = order.status
     hydratedOrderId.value = order.id
     hydratedRenewOrderId.value = null
     const payload = buildCustomerOrderPayload()
@@ -1689,6 +1871,7 @@ async function applyRenewOrderQuery() {
       hydrateSpecialAudit(audit)
     } else {
       hydratePendingPaymentOrder(order)
+      resetRenewOrderDate(order.orderType)
     }
     editingOrderId.value = null
     hydratedOrderId.value = null
@@ -1705,11 +1888,20 @@ async function loadRenewSourceAudit(sourceAuditId: number) {
   return audits.find((audit) => audit.id === sourceAuditId) || null
 }
 
+function resetRenewOrderDate(orderType: OrderType) {
+  if (orderType === 'KEYWORD_INSTALL') {
+    keywordInstallDate.value = today()
+    return
+  }
+  dateRange.value = ''
+}
+
 function hydratePendingPaymentOrder(order: Order) {
   hydratingOrder = true
   try {
     form.storeType = order.storeType
     form.orderType = order.orderType
+    selectedOrderModuleId.value = order.orderModuleId || null
     form.customerAppId = order.customerAppId
     form.regionCode = order.regionCode === 'MULTI' ? '' : order.regionCode || ''
     form.executionHours = order.executionHours || 1
@@ -1758,6 +1950,7 @@ function specialGroupsFromAudit(audit: SpecialOrderAudit): SpecialRegionGroup[] 
     group.items.push({
       regionCode,
       keyword: item.keyword || '',
+      chartType: item.chartType || (audit.orderType === 'CHART_RANK_GUARANTEE' ? item.keyword : '') || '',
       targetRank: item.targetRank || 1,
       coverageNote: item.coverageNote || ''
     })
@@ -1765,7 +1958,7 @@ function specialGroupsFromAudit(audit: SpecialOrderAudit): SpecialRegionGroup[] 
   })
   const result = Array.from(groups.values())
   result.forEach((group) => {
-    group.items = group.items.filter((item) => item.keyword.trim())
+    group.items = group.items.filter((item) => audit.orderType === 'CHART_RANK_GUARANTEE' ? item.chartType.trim() : item.keyword.trim())
     if (group.items.length === 0) group.items = [createSpecialItem()]
   })
   return result.length ? result : [createSpecialGroup(audit.regionCode || '')]
@@ -1786,22 +1979,9 @@ function groupsFromOrder(order: Order): RegionKeywordGroup[] {
     })
     return normalizeHydratedGroups(Array.from(groups.values()), 'keywordItems')
   }
-  if (order.orderType === 'REVIEW' && order.commentDetails.length > 0) {
-    const groups = new Map<string, RegionKeywordGroup>()
-    order.commentDetails.forEach((detail) => {
-      const group = groups.get(detail.regionCode) || createRegionGroup(detail.regionCode)
-      group.reviewItems.push({
-        starLevel: detail.starLevel === 4 ? 4 : 5,
-        commentTitle: detail.commentTitle,
-        commentContent: detail.commentContent
-      })
-      groups.set(detail.regionCode, group)
-    })
-    return normalizeHydratedGroups(Array.from(groups.values()), 'reviewItems')
-  }
 
-  const days = Math.max(1, order.totalDays || totalDays.value || 1)
   const groups = new Map<string, RegionKeywordGroup>()
+  const days = Math.max(1, Number(order.totalDays || 1))
   order.items.forEach((item) => {
     const regionCode = item.regionCode || form.regionCode
     if (!regionCode) return
@@ -1818,19 +1998,19 @@ function groupsFromOrder(order: Order): RegionKeywordGroup[] {
     }
     groups.set(regionCode, group)
   })
+  for (const file of order.reviewAttachments || []) {
+    const group = groups.get(file.regionCode || '')
+    if (group) group.reviewAttachments.push(file)
+  }
   return Array.from(groups.values()).length ? Array.from(groups.values()) : [createRegionGroup(form.regionCode)]
 }
 
-function normalizeHydratedGroups(groups: RegionKeywordGroup[], listKey: 'keywordItems' | 'reviewItems') {
+function normalizeHydratedGroups(groups: RegionKeywordGroup[], listKey: 'keywordItems') {
   const normalized = groups.length ? groups : [createRegionGroup(form.regionCode)]
   normalized.forEach((group) => {
     if (listKey === 'keywordItems') {
       group.keywordItems = group.keywordItems.filter((item) => item.keyword.trim())
       if (group.keywordItems.length === 0) group.keywordItems = [{ keyword: '', quantity: null }]
-    }
-    if (listKey === 'reviewItems') {
-      group.reviewItems = group.reviewItems.filter((item) => item.commentTitle.trim() || item.commentContent.trim())
-      if (group.reviewItems.length === 0) group.reviewItems = [createReviewItem()]
     }
   })
   return normalized
@@ -1848,6 +2028,7 @@ function isOrderType(value: unknown): value is OrderType {
     || value === 'RATING'
     || value === 'REVIEW'
     || value === 'RANK_GUARANTEE'
+    || value === 'CHART_RANK_GUARANTEE'
     || value === 'KEYWORD_COVERAGE'
 }
 
@@ -1869,6 +2050,10 @@ function regionLabel(code: string) {
   const region = regions.value.find((item) => item.code === code)
   if (!region) return code
   return locale.value.startsWith('zh') ? region.nameZh : region.nameEn
+}
+
+function regionSearchLabel(code: string) {
+  return `${code} · ${regionLabel(code)}`
 }
 
 function flagUrl(code: string) {
@@ -1925,8 +2110,11 @@ function errorMessage(error: unknown, fallback: string) {
 </script>
 
 <style scoped>
+.review-attachments { padding: 16px; }
+.review-attachments p { color: #909399; font-size: 13px; }
+.review-attachment-row { display: flex; align-items: center; gap: 16px; padding: 6px 0; overflow-wrap: anywhere; }
 .order-create-page {
-  color: #182230;
+  color: #0f172a;
   min-height: calc(100vh - 112px);
   padding-bottom: 72px;
   background:
@@ -1940,6 +2128,56 @@ function errorMessage(error: unknown, fallback: string) {
 
 .type-tabs {
   margin-bottom: 0;
+  padding: 6px;
+  border: 1px solid #e7edf5;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.selected-module-card {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 14px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid #cfe0ff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f5f9ff 0%, #fff 72%);
+}
+
+.selected-module-marker {
+  width: 4px;
+  flex: 0 0 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #2f7cf6, #1757d8);
+}
+
+.selected-module-content {
+  min-width: 0;
+}
+
+.selected-module-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #6480a8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.selected-module-content strong {
+  display: block;
+  color: #17233b;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.selected-module-content p {
+  margin: 4px 0 0;
+  color: #5d6f8d;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .type-tabs :deep(.el-tabs__header) {
@@ -1955,35 +2193,54 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 .type-tabs :deep(.el-tabs__nav) {
-  display: inline-grid;
-  min-width: 100%;
-  grid-template-columns: repeat(6, minmax(136px, 1fr));
-  border: 1px solid #d7e3f3;
-  border-radius: 5px;
-  overflow: hidden;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  border: 0;
+  overflow: visible;
 }
 
 .type-tabs :deep(.el-tabs__item) {
   height: auto;
-  min-height: 40px;
+  min-height: 52px;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 9px 12px;
   justify-content: center;
-  border-right: 1px solid #d7e3f3;
-  color: #344054;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.3;
   white-space: normal;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, color 160ms ease;
 }
 
 .type-tabs :deep(.el-tabs__item:last-child) {
-  border-right: 0;
+  border-right: 1px solid #dbe4ef;
+}
+
+.type-tabs :deep(.el-tabs--top > .el-tabs__header .el-tabs__item:nth-child(2)) {
+  padding-left: 12px;
+}
+
+.type-tabs :deep(.el-tabs--top > .el-tabs__header .el-tabs__item:last-child) {
+  padding-right: 12px;
+}
+
+.type-tabs :deep(.el-tabs__item:hover) {
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }
 
 .type-tabs :deep(.el-tabs__item.is-active) {
-  background: #edf6ff;
-  color: #1677ff;
+  border-color: #60a5fa;
+  background: linear-gradient(135deg, #eff6ff, #f8fbff);
+  box-shadow: 0 5px 14px rgb(37 99 235 / 12%);
+  color: #1d4ed8;
 }
 
 .type-tabs :deep(.el-tabs__active-bar) {
@@ -1991,18 +2248,24 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 .tab-label {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
   max-width: 100%;
-  text-align: center;
-  overflow-wrap: anywhere;
+  text-align: left;
+  overflow-wrap: break-word;
 }
 
 .tab-icon {
   width: 16px;
   height: 16px;
+  color: #64748b;
+}
+
+.type-tabs :deep(.el-tabs__item.is-active) .tab-icon {
+  color: #2563eb;
 }
 
 .order-form {
@@ -2027,14 +2290,14 @@ function errorMessage(error: unknown, fallback: string) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #e6eaf0;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   background: #ffffff;
   box-shadow: 0 18px 42px rgb(24 34 48 / 6%);
 }
 
 .summary-panel {
-  border: 1px solid #e6eaf0;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   background: #ffffff;
   box-shadow: 0 18px 42px rgb(24 34 48 / 6%);
@@ -2057,24 +2320,26 @@ function errorMessage(error: unknown, fallback: string) {
 
 .section-heading h2 {
   margin: 0;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 800;
 }
 
 .section-heading h2 span {
-  color: #ff4d4f;
+  color: #dc2626;
 }
 
 .section-heading-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .region-tool-buttons {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2160,14 +2425,16 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 .app-picker-line {
-  width: min(100%, 370px);
+  width: min(100%, 520px);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px;
+  grid-template-columns: minmax(220px, 1fr) max-content;
   gap: 10px;
   align-items: center;
 }
 
 .add-app-button {
+  width: auto;
+  white-space: nowrap;
   min-height: 32px;
   padding: 8px 12px;
   border-radius: 4px;
@@ -2180,7 +2447,7 @@ function errorMessage(error: unknown, fallback: string) {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #001dff;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 700;
 }
@@ -2193,7 +2460,7 @@ function errorMessage(error: unknown, fallback: string) {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid #d7e3f3;
+  border: 1px solid #e2e8f0;
   border-radius: 5px;
   overflow: hidden;
 }
@@ -2207,9 +2474,9 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 .store-switch :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
-  background: #edf6ff;
+  background: #eff6ff;
   border-color: transparent;
-  color: #1677ff;
+  color: #2563eb;
   box-shadow: none;
 }
 
@@ -2229,7 +2496,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 .app-option small {
-  color: #667085;
+  color: #64748b;
 }
 
 .task-panel {
@@ -2247,7 +2514,7 @@ function errorMessage(error: unknown, fallback: string) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #344054;
+  color: #334155;
   font-size: 14px;
   font-weight: 700;
 }
@@ -2270,21 +2537,23 @@ function errorMessage(error: unknown, fallback: string) {
 
 .region-group-head {
   display: grid;
-  grid-template-columns: 300px auto;
-  column-gap: 44px;
+  grid-template-columns: minmax(0, 340px) minmax(0, max-content);
+  gap: 16px 28px;
   align-items: end;
 }
 
-.region-select-line,
-.region-actions {
+.region-select-line {
   display: grid;
-  grid-template-columns: 80px 220px;
+  grid-template-columns: max-content minmax(220px, 1fr);
   gap: 12px;
   align-items: center;
 }
 
 .region-actions {
-  grid-template-columns: 42px 78px;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: 12px;
+  align-items: center;
 }
 
 .region-metric-groups {
@@ -2301,29 +2570,36 @@ function errorMessage(error: unknown, fallback: string) {
 
 .region-metric-toolbar {
   display: grid;
-  grid-template-columns: 300px auto;
-  column-gap: 44px;
+  grid-template-columns: minmax(0, 340px) minmax(0, max-content);
+  gap: 16px 28px;
   align-items: end;
 }
 
 .region-action-line {
-  display: grid;
-  grid-template-columns: 42px 96px;
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
+}
+
+.region-action-line :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .region-select-line span,
 .region-actions span,
 .region-action-line span {
-  color: #344054;
+  color: #334155;
   font-size: 14px;
   font-weight: 700;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .remove-region-button {
-  width: 78px;
+  width: auto;
+  min-width: 78px;
+  max-width: 220px;
   min-height: 28px;
   padding: 6px 10px;
   border-radius: 4px;
@@ -2334,7 +2610,7 @@ function errorMessage(error: unknown, fallback: string) {
 .keyword-table {
   width: min(100%, 665px);
   overflow: hidden;
-  border: 1px solid #d7e3f3;
+  border: 1px solid #e2e8f0;
 }
 
 .keyword-table-head,
@@ -2350,8 +2626,8 @@ function errorMessage(error: unknown, fallback: string) {
 .keyword-table-head span {
   min-height: 40px;
   padding: 11px 14px;
-  border-right: 1px solid #d7e3f3;
-  color: #344054;
+  border-right: 1px solid #e2e8f0;
+  color: #334155;
   font-size: 13px;
   font-weight: 800;
 }
@@ -2363,13 +2639,13 @@ function errorMessage(error: unknown, fallback: string) {
 .keyword-row {
   min-height: 48px;
   align-items: center;
-  border-top: 1px solid #d7e3f3;
+  border-top: 1px solid #e2e8f0;
 }
 
 .keyword-cell {
   min-height: 48px;
   padding: 7px 9px;
-  border-right: 1px solid #d7e3f3;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
 }
@@ -2392,7 +2668,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 .keyword-cell :deep(.el-input__wrapper) {
   min-height: 32px;
-  box-shadow: 0 0 0 1px #d7e3f3 inset;
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
 }
 
 .keyword-delete-button {
@@ -2401,13 +2677,13 @@ function errorMessage(error: unknown, fallback: string) {
   min-height: 28px;
   padding: 0;
   justify-self: center;
-  color: #ff4d6a;
+  color: #dc2626;
 }
 
 .region-metric-table {
   width: min(100%, 665px);
   overflow: hidden;
-  border: 1px solid #d7e3f3;
+  border: 1px solid #e2e8f0;
 }
 
 .region-metric-head,
@@ -2432,8 +2708,8 @@ function errorMessage(error: unknown, fallback: string) {
 .region-metric-head span {
   min-height: 40px;
   padding: 11px 14px;
-  border-right: 1px solid #d7e3f3;
-  color: #344054;
+  border-right: 1px solid #e2e8f0;
+  color: #334155;
   font-size: 13px;
   font-weight: 800;
 }
@@ -2445,13 +2721,13 @@ function errorMessage(error: unknown, fallback: string) {
 .region-metric-row {
   min-height: 48px;
   align-items: center;
-  border-top: 1px solid #d7e3f3;
+  border-top: 1px solid #e2e8f0;
 }
 
 .region-metric-cell {
   min-height: 48px;
   padding: 7px 9px;
-  border-right: 1px solid #d7e3f3;
+  border-right: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
 }
@@ -2467,19 +2743,19 @@ function errorMessage(error: unknown, fallback: string) {
 
 .region-metric-cell :deep(.el-input__wrapper) {
   min-height: 32px;
-  box-shadow: 0 0 0 1px #d7e3f3 inset;
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
 }
 
 .review-detail-table,
 .special-item-table {
   width: min(100%, 860px);
   overflow: hidden;
-  border: 1px solid #d7e3f3;
+  border: 1px solid #e2e8f0;
 }
 
 .special-item-table {
   width: 100%;
-  border-color: #d8e2f0;
+  border-color: #e2e8f0;
   border-radius: 6px;
   background: #ffffff;
 }
@@ -2511,8 +2787,8 @@ function errorMessage(error: unknown, fallback: string) {
 .special-item-head span {
   min-height: 40px;
   padding: 11px 14px;
-  border-right: 1px solid #d8e2f0;
-  color: #344054;
+  border-right: 1px solid #e2e8f0;
+  color: #334155;
   font-size: 13px;
   font-weight: 800;
 }
@@ -2525,14 +2801,14 @@ function errorMessage(error: unknown, fallback: string) {
 .review-detail-row,
 .special-item-row {
   min-height: 48px;
-  border-top: 1px solid #d8e2f0;
+  border-top: 1px solid #e2e8f0;
 }
 
 .review-detail-row > *,
 .special-item-row > * {
   min-height: 48px;
   padding: 7px 9px;
-  border-right: 1px solid #d8e2f0;
+  border-right: 1px solid #e2e8f0;
 }
 
 .review-detail-row > *:last-child,
@@ -2570,7 +2846,7 @@ function errorMessage(error: unknown, fallback: string) {
   width: min(100%, 1120px);
   gap: 16px;
   padding: 16px;
-  border: 1px solid #d8e2f0;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fbfdff;
 }
@@ -2578,7 +2854,7 @@ function errorMessage(error: unknown, fallback: string) {
 .special-item-footer {
   min-height: 42px;
   padding: 7px 10px;
-  border-top: 1px solid #d8e2f0;
+  border-top: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   background: #ffffff;
@@ -2620,7 +2896,7 @@ function errorMessage(error: unknown, fallback: string) {
   margin-left: 0;
   min-height: 28px;
   padding: 4px 8px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -2663,7 +2939,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 .summary-heading span,
 .summary-item span {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
   font-weight: 700;
 }
@@ -2684,7 +2960,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 .summary-item strong {
   min-width: 0;
-  color: #182230;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 800;
   text-align: right;
@@ -2695,8 +2971,8 @@ function errorMessage(error: unknown, fallback: string) {
   width: 100%;
   min-height: 42px;
   font-weight: 800;
-  background: #1677ff;
-  border-color: #1677ff;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .billing-note {
@@ -2704,17 +2980,17 @@ function errorMessage(error: unknown, fallback: string) {
   padding: 12px;
   border: 1px solid #9ec5fe;
   border-radius: 6px;
-  background: #f0f7ff;
+  background: #eff6ff;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: #344054;
+  color: #334155;
   font-size: 13px;
   line-height: 1.6;
 }
 
 .billing-note strong {
-  color: #1677ff;
+  color: #2563eb;
 }
 
 .billing-breakdown {
@@ -2725,7 +3001,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 .breakdown-title {
   margin-bottom: 10px;
-  color: #182230;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 800;
 }
@@ -2749,7 +3025,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 .breakdown-line strong {
   display: block;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 800;
   line-height: 1.35;
@@ -2758,13 +3034,13 @@ function errorMessage(error: unknown, fallback: string) {
 .breakdown-line span {
   display: block;
   margin-top: 4px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
   line-height: 1.45;
 }
 
 .breakdown-line b {
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
@@ -2773,7 +3049,7 @@ function errorMessage(error: unknown, fallback: string) {
 .summary-checkout {
   margin-top: 16px;
   padding-top: 14px;
-  border-top: 1px solid #e6eaf0;
+  border-top: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2788,11 +3064,11 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 .checkout-total span {
-  color: #182230;
+  color: #0f172a;
 }
 
 .checkout-total strong {
-  color: #ff3b30;
+  color: #dc2626;
   font-size: 20px;
 }
 
@@ -2806,7 +3082,7 @@ function errorMessage(error: unknown, fallback: string) {
   }
 
   .type-tabs :deep(.el-tabs__nav) {
-    grid-template-columns: repeat(6, minmax(136px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .form-grid {
@@ -2819,10 +3095,27 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 @media (max-width: 640px) {
+  .app-picker-line {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .add-app-button {
+    justify-self: start;
+  }
+
   .count-grid,
   .region-group-head,
+  .region-metric-toolbar,
   .store-switch {
     grid-template-columns: 1fr;
+  }
+
+  .region-select-line,
+  .region-actions,
+  .region-action-line {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .step-field-grid {

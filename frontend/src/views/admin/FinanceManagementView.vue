@@ -1,9 +1,10 @@
 <template>
   <section class="finance-page">
+    <div class="finance-control-card">
     <div class="toolbar">
       <p class="page-note">{{ pageCopy.subtitle }}</p>
       <div class="toolbar-actions">
-        <el-button type="success" :icon="Plus" @click="openAdjustmentDialog">
+        <el-button type="primary" :icon="Plus" @click="openAdjustmentDialog">
           {{ t('wallet.balanceAdjustment') }}
         </el-button>
         <el-button v-if="isRechargeRecordsPage" type="primary" :icon="Plus" @click="openRechargeDialog">
@@ -50,9 +51,13 @@
       </div>
     </div>
 
+    </div>
+
     <div class="table-card">
       <el-table v-loading="loading" class="transaction-table" :data="transactions" :empty-text="t('wallet.empty')">
-        <el-table-column prop="transactionNo" :label="t('wallet.transactionNo')" min-width="170" />
+        <el-table-column :label="t('wallet.transactionNo')" min-width="170">
+          <template #default="{ row }"><span class="data-id">{{ row.transactionNo }}</span></template>
+        </el-table-column>
         <el-table-column :label="t('wallet.customer')" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="customer-cell">
@@ -68,7 +73,7 @@
         </el-table-column>
         <el-table-column :label="t('wallet.relatedOrder')" min-width="190">
           <template #default="{ row }">
-            {{ row.orderNo || '-' }}
+            <span class="related-id">{{ row.orderNo || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.orderType')" min-width="140">
@@ -85,12 +90,12 @@
         </el-table-column>
         <el-table-column :label="t('wallet.amount')" width="140" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.amount) }}
+            <span class="money-value" :class="row.direction === 'CREDIT' ? 'is-credit' : 'is-debit'">{{ formatMoney(row.amount) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.balanceAfter')" width="150" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.balanceAfter) }}
+            <span class="balance-value">{{ formatMoney(row.balanceAfter) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.createdAt')" min-width="170">
@@ -113,7 +118,7 @@
       </div>
     </div>
 
-    <el-dialog v-model="rechargeDialogVisible" :title="t('wallet.rechargeTitle')" width="420px">
+    <el-dialog append-to-body v-model="rechargeDialogVisible" :title="t('wallet.rechargeTitle')" width="420px">
       <el-form class="recharge-form" label-position="top">
         <el-form-item :label="t('wallet.customer')" required>
           <el-select
@@ -168,7 +173,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="adjustmentDialogVisible" :title="t('wallet.balanceAdjustmentTitle')" width="460px">
+    <el-dialog append-to-body v-model="adjustmentDialogVisible" :title="t('wallet.balanceAdjustmentTitle')" width="460px">
       <el-form class="recharge-form" label-position="top">
         <el-form-item :label="t('wallet.customer')" required>
           <el-select
@@ -470,7 +475,7 @@ function orderTypeLabel(orderType?: string | null) {
 
 <style scoped>
 .finance-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .toolbar {
@@ -495,7 +500,7 @@ p {
 .page-note {
   max-width: 720px;
   margin: 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.6;
 }
 
@@ -534,7 +539,7 @@ p {
 .customer-cell strong {
   display: block;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -544,7 +549,7 @@ p {
 .customer-cell span {
   display: block;
   overflow: hidden;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -574,8 +579,8 @@ p {
 }
 
 :global(.finance-customer-select-dropdown .el-select-dropdown__item.selected) {
-  background: #edf4ff;
-  color: #1b75d0;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-weight: 700;
 }
 
@@ -584,13 +589,13 @@ p {
 }
 
 :global(.finance-customer-select-dropdown .customer-option strong) {
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
 }
 
 :global(.finance-customer-select-dropdown .customer-option span) {
   margin-top: 3px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -614,7 +619,7 @@ p {
 
 .transaction-table :deep(.el-table__header th) {
   background: #f6f7f9;
-  color: #667085;
+  color: #64748b;
   font-weight: 500;
 }
 
@@ -646,4 +651,62 @@ p {
     justify-content: flex-start;
   }
 }
-</style>
+
+.finance-control-card {
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid #dfe7f1;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 5%);
+}
+
+.finance-control-card .toolbar {
+  min-height: 68px;
+  margin: 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid #edf1f6;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.finance-control-card .filter-panel {
+  min-height: 62px;
+  margin: 0;
+  padding: 13px 18px;
+  background: #ffffff;
+}
+
+.finance-control-card .filter-item > span {
+  color: #475569;
+  font-weight: 650;
+}
+
+.finance-control-card .customer-select {
+  width: 300px;
+}
+
+.finance-control-card .filter-actions {
+  margin-left: 2px;
+}
+
+@media (max-width: 860px) {
+  .finance-control-card .toolbar {
+    align-items: flex-start;
+    padding: 15px;
+  }
+
+  .finance-control-card .filter-panel {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 15px;
+  }
+
+  .finance-control-card .filter-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .finance-control-card .customer-select {
+    width: 100%;
+  }
+}</style>

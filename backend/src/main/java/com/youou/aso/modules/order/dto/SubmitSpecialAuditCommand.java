@@ -34,8 +34,17 @@ public record SubmitSpecialAuditCommand(
     public record AuditItem(
             String regionCode,
             String keyword,
+            String chartType,
             Integer targetRank,
-            String coverageNote
+            String coverageNote,
+            java.math.BigDecimal unitPrice,
+            Integer executionDays
     ) {
+        public AuditItem(String regionCode, String keyword, Integer targetRank, String coverageNote) {
+            this(regionCode, keyword, null, targetRank, coverageNote, null, null);
+        }
+        public AuditItem(String regionCode, String keyword, String chartType, Integer targetRank, String coverageNote) {
+            this(regionCode, keyword, chartType, targetRank, coverageNote, null, null);
+        }
     }
 }

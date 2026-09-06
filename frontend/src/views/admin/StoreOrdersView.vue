@@ -101,12 +101,20 @@
       </div>
       <div class="query-actions">
         <el-button type="primary" :icon="Plus" @click="createOrder">{{ t('ordersPage.newOrder') }}</el-button>
-        <el-button type="primary" color="#ff6a00" :icon="Search" @click="searchOrders">{{ t('ordersPage.search') }}</el-button>
+        <el-button type="primary" :icon="Search" @click="searchOrders">{{ t('ordersPage.search') }}</el-button>
         <el-button :icon="Delete" @click="resetFilters">{{ t('ordersPage.clear') }}</el-button>
         <el-button v-if="showBatchConfirm" :icon="Check" @click="batchConfirm">{{ t('ordersPage.batchConfirm') }}</el-button>
         <el-button v-if="showBatchExecute" :icon="VideoPlay" @click="batchExecute">{{ t('ordersPage.batchExecute') }}</el-button>
         <el-button v-if="showBatchPause" :icon="VideoPause" @click="batchPause">{{ t('ordersPage.batchPause') }}</el-button>
         <el-button :icon="Download" @click="exportOrders">{{ t('ordersPage.export') }}</el-button>
+        <TableColumnSettings
+          v-model="visibleColumns"
+          :options="columnOptions"
+          :defaults="defaultColumnKeys"
+          :title="t('ordersPage.columnSettings')"
+          :select-all-text="t('ordersPage.selectAllColumns')"
+          :restore-defaults-text="t('ordersPage.restoreDefaultColumns')"
+        />
       </div>
     </div>
 
@@ -121,12 +129,12 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column v-if="showBatchActions" type="selection" width="48" :selectable="isSelectableOrderRow" />
-        <el-table-column prop="orderNo" :label="t('ordersPage.orderNo')" min-width="210">
+        <el-table-column v-if="isColumnVisible('orderNo')" prop="orderNo" :label="t('ordersPage.orderNo')" min-width="210">
           <template #default="{ row }">
             <span class="order-no">{{ row.orderNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.customer')" min-width="180">
+        <el-table-column v-if="isColumnVisible('customer')" :label="t('ordersPage.customer')" min-width="180">
           <template #default="{ row }">
             <div class="customer-cell">
               <strong>{{ orderCustomerName(row) }}</strong>
@@ -134,7 +142,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.app')" min-width="220">
+        <el-table-column v-if="isColumnVisible('app')" :label="t('ordersPage.app')" min-width="220">
           <template #default="{ row }">
             <div class="app-cell">
               <div class="app-icon">
@@ -150,49 +158,87 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.orderTime')" min-width="190">
+        <el-table-column v-if="isColumnVisible('appIdentifier')" prop="appIdentifier" :label="t('ordersPage.appIdentifier')" min-width="190" />
+        <el-table-column v-if="isColumnVisible('store')" :label="t('ordersPage.store')" min-width="120">
+          <template #default="{ row }">{{ storeLabel(row.storeType) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('region')" prop="regionCode" :label="t('ordersPage.region')" min-width="100" />
+        <el-table-column v-if="isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="190">
           <template #default="{ row }">{{ orderDateText(row) }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.taskType')" min-width="150">
-          <template #default="{ row }">{{ typeLabel(row.orderType) }}</template>
+        <el-table-column v-if="isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
+          <template #default="{ row }">{{ valueOrDash(row.totalDays) }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.orderCategory')" min-width="130">
+        <el-table-column v-if="isColumnVisible('executionHours')" :label="t('orderDetail.executionHours')" min-width="120" align="right">
+          <template #default="{ row }">{{ valueOrDash(row.executionHours) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('quantity')" :label="t('ordersPage.quantity')" min-width="100" align="right">
+          <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
+          <template #default="{ row }">{{ money(row.unitPrice) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('amount')" :label="t('ordersPage.amount')" min-width="120" align="right">
+          <template #default="{ row }">{{ money(row.totalAmount) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
+          <template #default="{ row }">{{ money(row.refundAmount) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('taskType')" :label="t('ordersPage.taskType')" min-width="150">
+          <template #default="{ row }">{{ orderTypeLabel(row) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('orderCategory')" :label="t('ordersPage.orderCategory')" min-width="130">
           <template #default="{ row }">{{ isAuditRow(row) || row.sourceAuditId ? t('ordersPage.categories.SPECIAL') : t('ordersPage.categories.REGULAR') }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.status')" min-width="130" align="center">
+        <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="130" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.createdAt')" min-width="170">
+        <el-table-column v-if="isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.expectedCompletedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('confirmedAt')" :label="t('orderDetail.confirmedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.confirmedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('executedAt')" :label="t('orderDetail.executedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.executedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('completedAt')" :label="t('orderDetail.completedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.completedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.actions')" width="210" fixed="right" align="center">
+        <el-table-column v-if="isColumnVisible('actions')" :label="t('ordersPage.actions')" width="220" fixed="right" align="center">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-button size="small" text type="primary" :icon="View" @click="viewDetail(row)">
-                {{ t('ordersPage.detail') }}
+              <el-button class="action-detail" size="small" text type="primary" :icon="View" @click="viewDetail(row)">
+                {{ t('ordersPage.actionDetail') }}
               </el-button>
               <el-button v-if="row.status === 'PENDING_CONFIRM'" size="small" :icon="Check" @click="confirmOrder(row)">
-                {{ t('ordersPage.confirm') }}
+                {{ t('ordersPage.actionConfirm') }}
               </el-button>
               <el-button v-if="showBatchExecute && row.status === 'PENDING_EXECUTION'" size="small" :icon="VideoPlay" @click="executeOrder(row)">
-                {{ t('ordersPage.execute') }}
+                {{ t('ordersPage.actionExecute') }}
               </el-button>
               <el-button v-if="row.status === 'EXECUTING'" size="small" :icon="VideoPause" @click="pauseOrder(row)">
-                {{ t('ordersPage.pause') }}
+                {{ t('ordersPage.actionPause') }}
+              </el-button>
+              <el-button v-if="row.status === 'PAUSED'" size="small" :icon="Edit" @click="openPausedEdit(row)">
+                {{ t('ordersPage.actionEditProgress') }}
               </el-button>
               <el-button v-if="row.status === 'PAUSED'" size="small" :icon="VideoPlay" @click="resumeOrder(row)">
-                {{ t('ordersPage.resume') }}
-              </el-button>
-              <el-button v-if="canRenewOrder(row)" size="small" text type="primary" :icon="RefreshRight" @click="renewOrder(row)">
-                {{ t('ordersPage.renewOrder') }}
+                {{ t('ordersPage.actionResume') }}
               </el-button>
               <el-button v-if="isAuditRow(row) && row.status === 'PENDING_REVIEW'" size="small" :icon="Check" @click="openReviewAudit(row)">
-                {{ t('specialAudit.review') }}
+                {{ t('ordersPage.actionReview') }}
               </el-button>
-              <el-button v-if="canCancel(row)" size="small" type="danger" plain @click="cancelOrder(row)">
-                {{ t('ordersPage.cancelOrder') }}
+              <el-button v-if="canRenewOrder(row)" size="small" :icon="RefreshRight" @click="renewOrder(row)">
+                {{ t('ordersPage.actionRenew') }}
+              </el-button>
+              <el-button v-if="canCancel(row)" size="small" type="danger" plain :icon="Delete" @click="cancelOrder(row)">
+                {{ t('ordersPage.actionCancel') }}
               </el-button>
             </div>
           </template>
@@ -212,14 +258,66 @@
       </div>
     </div>
 
-    <el-dialog v-model="reviewDialogVisible" :title="t('specialAudit.review')" width="520px">
+    <el-dialog append-to-body v-model="pausedEditDialogVisible" :title="t('ordersPage.editPausedOrderTitle')" width="760px">
+      <p class="paused-edit-tip">{{ t('ordersPage.editPausedOrderTip') }}</p>
+      <el-table :data="pausedEditItems" border>
+        <el-table-column :label="t('ordersPage.itemName')" min-width="190">
+          <template #default="{ row }">
+            <strong>{{ row.itemName }}</strong>
+            <div class="paused-item-region">{{ row.regionCode || '-' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('ordersPage.unitPrice')" width="120" align="right">
+          <template #default="{ row }">USD {{ Number(row.unitPrice).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column :label="t('ordersPage.orderQuantity')" width="170" align="center">
+          <template #default="{ row }">
+            <el-input-number v-model="row.quantity" :min="1" :precision="0" controls-position="right" />
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('ordersPage.completedQuantity')" width="170" align="center">
+          <template #default="{ row }">
+            <el-input-number v-model="row.completedQuantity" :min="0" :max="row.quantity" :precision="0" controls-position="right" />
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="paused-edit-summary">
+        <span>{{ t('ordersPage.originalAmount') }}：USD {{ pausedOriginalAmount.toFixed(2) }}</span>
+        <strong>{{ t('ordersPage.adjustedAmount') }}：USD {{ pausedAdjustedAmount.toFixed(2) }}</strong>
+        <span :class="{ refund: pausedAmountDifference < 0, debit: pausedAmountDifference > 0 }">
+          {{ pausedAdjustmentText }}
+        </span>
+      </div>
+      <template #footer>
+        <el-button @click="pausedEditDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="savingPausedEdit" @click="savePausedEdit">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
+    <el-dialog append-to-body v-model="reviewDialogVisible" :title="t('specialAudit.review')" width="860px">
       <el-form label-position="top">
         <el-form-item :label="t('specialAudit.content')">
           <el-input v-model="reviewForm.negotiatedContent" type="textarea" :rows="4" />
         </el-form-item>
-        <el-form-item :label="t('specialAudit.price')">
+        <el-table v-if="reviewUsesItemPricing" :data="reviewForm.itemPricing" border>
+          <el-table-column :label="selectedAudit?.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keyword')" min-width="180">
+            <template #default="{ row }">{{ row.name }}</template>
+          </el-table-column>
+          <el-table-column :label="t('orderCreate.unitPrice')" width="180">
+            <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0.01" :precision="2" :step="0.1" /></template>
+          </el-table-column>
+          <el-table-column :label="t('orderCreate.executionDays')" width="170">
+            <template #default="{ row }"><el-input-number v-model="row.executionDays" :min="1" :max="3650" :precision="0" /></template>
+          </el-table-column>
+          <el-table-column :label="t('ordersPage.amount')" width="130" align="right">
+            <template #default="{ row }">{{ money(row.unitPrice * row.executionDays) }}</template>
+          </el-table-column>
+        </el-table>
+        <el-form-item v-else :label="t('specialAudit.price')">
           <el-input-number v-model="reviewForm.negotiatedPrice" :min="0.01" :precision="2" :step="1" controls-position="right" />
         </el-form-item>
+        <div v-if="reviewUsesItemPricing" class="review-price-total">
+          <span>{{ t('orderCreate.total') }}</span><strong>{{ money(reviewCalculatedPrice) }}</strong>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="reviewDialogVisible = false">{{ t('common.cancel') }}</el-button>
@@ -234,7 +332,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Delete, Download, Plus, RefreshRight, Search, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
+import { Check, Delete, Download, Edit, Plus, RefreshRight, Search, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
 import {
   batchConfirmAdminOrders,
   batchExecuteAdminOrders,
@@ -245,6 +343,7 @@ import {
   getAdminOrdersPage,
   pauseAdminOrder,
   resumeAdminOrder,
+  updatePausedAdminOrder,
   type Order,
   type OrderListStatus,
   type OrderStatus,
@@ -260,10 +359,48 @@ import {
   type SpecialOrderAudit
 } from '@/api/specialOrderAudits'
 import { exportOrdersCsv } from '@/utils/orderExport'
+import TableColumnSettings, { type TableColumnOption } from '@/components/TableColumnSettings.vue'
+import { usePersistentTableColumns } from '@/composables/usePersistentTableColumns'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+
+const defaultColumnKeys = ['orderNo', 'customer', 'app', 'orderTime', 'taskType', 'orderCategory', 'status', 'createdAt', 'actions']
+const allColumnKeys = [
+  'orderNo', 'customer', 'app', 'appIdentifier', 'store', 'region', 'orderTime', 'totalDays', 'executionHours',
+  'quantity', 'unitPrice', 'amount', 'refundAmount', 'taskType', 'orderCategory', 'status', 'expectedCompletedAt',
+  'confirmedAt', 'executedAt', 'completedAt', 'createdAt', 'actions'
+]
+const { visibleColumns, isColumnVisible } = usePersistentTableColumns(
+  'youou.admin.order-list.columns',
+  allColumnKeys,
+  defaultColumnKeys
+)
+const columnOptions = computed<TableColumnOption[]>(() => [
+  { key: 'orderNo', label: t('ordersPage.orderNo') },
+  { key: 'customer', label: t('ordersPage.customer') },
+  { key: 'app', label: t('ordersPage.app') },
+  { key: 'appIdentifier', label: t('ordersPage.appIdentifier') },
+  { key: 'store', label: t('ordersPage.store') },
+  { key: 'region', label: t('ordersPage.region') },
+  { key: 'orderTime', label: t('ordersPage.orderTime') },
+  { key: 'totalDays', label: t('orderDetail.totalDays') },
+  { key: 'executionHours', label: t('orderDetail.executionHours') },
+  { key: 'quantity', label: t('ordersPage.quantity') },
+  { key: 'unitPrice', label: t('ordersPage.unitPrice') },
+  { key: 'amount', label: t('ordersPage.amount') },
+  { key: 'refundAmount', label: t('ordersPage.refundAmount') },
+  { key: 'taskType', label: t('ordersPage.taskType') },
+  { key: 'orderCategory', label: t('ordersPage.orderCategory') },
+  { key: 'status', label: t('ordersPage.status') },
+  { key: 'expectedCompletedAt', label: t('ordersPage.expectedCompletedAt') },
+  { key: 'confirmedAt', label: t('orderDetail.confirmedAt') },
+  { key: 'executedAt', label: t('orderDetail.executedAt') },
+  { key: 'completedAt', label: t('orderDetail.completedAt') },
+  { key: 'createdAt', label: t('ordersPage.createdAt') },
+  { key: 'actions', label: t('ordersPage.actions') }
+])
 
 type OrderRow = Omit<Order, 'status'> & {
   status: OrderListStatus
@@ -282,6 +419,18 @@ const customerList = ref<CustomerAccount[]>([])
 const selectedOrders = ref<OrderRow[]>([])
 const loading = ref(false)
 const customersLoading = ref(false)
+const pausedEditDialogVisible = ref(false)
+const savingPausedEdit = ref(false)
+const pausedEditOrder = ref<OrderRow | null>(null)
+const pausedOriginalAmount = ref(0)
+const pausedEditItems = ref<Array<{
+  itemId: number
+  itemName: string
+  regionCode: string | null
+  unitPrice: number
+  quantity: number
+  completedQuantity: number
+}>>([])
 const reviewDialogVisible = ref(false)
 const submittingAudit = ref(false)
 const selectedAudit = ref<SpecialOrderAudit | null>(null)
@@ -289,8 +438,11 @@ const orderDateRange = ref<[string, string] | ''>('')
 const createdDateRange = ref<[string, string] | ''>('')
 const reviewForm = reactive({
   negotiatedContent: '',
-  negotiatedPrice: 0
+  negotiatedPrice: 0,
+  itemPricing: [] as Array<{ itemId: number; name: string; unitPrice: number; executionDays: number }>
 })
+const reviewUsesItemPricing = computed(() => ['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(selectedAudit.value?.orderType || ''))
+const reviewCalculatedPrice = computed(() => reviewForm.itemPricing.reduce((sum, item) => sum + item.unitPrice * item.executionDays, 0))
 
 const filters = reactive<{
   keyword: string
@@ -310,6 +462,21 @@ const filters = reactive<{
   status: ''
 })
 
+const pausedAdjustedAmount = computed(() =>
+  pausedEditItems.value.reduce((total, item) => total + item.quantity * item.unitPrice, 0)
+)
+const pausedAmountDifference = computed(() =>
+  Number((pausedAdjustedAmount.value - pausedOriginalAmount.value).toFixed(2))
+)
+const pausedAdjustmentText = computed(() => {
+  if (pausedAmountDifference.value > 0) {
+    return t('ordersPage.additionalDebit', { amount: pausedAmountDifference.value.toFixed(2) })
+  }
+  if (pausedAmountDifference.value < 0) {
+    return t('ordersPage.immediateRefund', { amount: Math.abs(pausedAmountDifference.value).toFixed(2) })
+  }
+  return t('ordersPage.noAmountChange')
+})
 const statusOptions: OrderListStatus[] = [
   'PENDING_REVIEW',
   'APPROVED_WAIT_SUBMIT',
@@ -328,6 +495,7 @@ const orderTypeOptions: OrderType[] = [
   'RATING',
   'REVIEW',
   'RANK_GUARANTEE',
+  'CHART_RANK_GUARANTEE',
   'KEYWORD_COVERAGE'
 ]
 
@@ -343,6 +511,7 @@ const title = computed(() => {
   if (statusFilter.value === 'PENDING_REVIEW') return t('menu.pendingReviewOrders')
   if (statusFilter.value === 'PENDING_EXECUTION') return t('menu.pendingExecutionOrders')
   if (statusFilter.value === 'EXECUTING') return t('menu.executingOrders')
+  if (statusFilter.value === 'PAUSED') return t('menu.pausedOrders')
   if (statusFilter.value === 'COMPLETED') return t('menu.completedOrders')
   if (storeType.value === 'GOOGLE_PLAY') return t('menu.googleOrders')
   if (storeType.value === 'IPAD_STORE') return t('menu.ipadOrders')
@@ -450,6 +619,7 @@ function resetRouteFilters() {
 
 function viewDetail(order: OrderRow) {
   if (isAuditRow(order)) {
+    router.push({ name: 'admin-special-order-audit-detail', params: { id: order.audit.id } })
     return
   }
   router.push({ name: 'admin-order-detail', params: { id: order.id } })
@@ -529,6 +699,8 @@ function toAuditRow(audit: SpecialOrderAudit): OrderRow {
     customerAppId: audit.customerAppId,
     sourceAuditId: audit.id,
     orderType: audit.orderType,
+    orderModuleId: null,
+    orderModuleName: null,
     storeType: audit.storeType,
     regionCode: audit.regionCode,
     appIdentifier: audit.appIdentifier,
@@ -549,6 +721,7 @@ function toAuditRow(audit: SpecialOrderAudit): OrderRow {
     createdAt: audit.createdAt,
     items: [],
     commentDetails: [],
+    events: [],
     rowKind: 'AUDIT',
     audit
   }
@@ -646,11 +819,15 @@ async function confirmOrder(order: OrderRow) {
 async function pauseOrder(order: OrderRow) {
   if (isAuditRow(order)) return
   try {
-    await ElMessageBox.confirm(t('ordersPage.pauseConfirm', { orderNo: order.orderNo }), t('ordersPage.pauseOrderTitle'), {
-      type: 'warning',
-      confirmButtonText: t('ordersPage.pause'),
-      cancelButtonText: t('ordersPage.keepOrder')
-    })
+    await ElMessageBox.confirm(
+      t('ordersPage.pauseConfirm', { orderNo: order.orderNo }),
+      t('ordersPage.pauseOrderTitle'),
+      {
+        type: 'warning',
+        confirmButtonText: t('ordersPage.pause'),
+        cancelButtonText: t('ordersPage.keepOrder')
+      }
+    )
     await pauseAdminOrder(order.id)
     ElMessage.success(t('ordersPage.pauseSuccess'))
     await loadOrders()
@@ -660,7 +837,50 @@ async function pauseOrder(order: OrderRow) {
     }
   }
 }
+function openPausedEdit(order: OrderRow) {
+  if (isAuditRow(order) || order.status !== 'PAUSED') return
+  pausedEditOrder.value = order
+  pausedOriginalAmount.value = Number(order.totalAmount || 0)
+  pausedEditItems.value = order.items.map((item) => ({
+    itemId: Number(item.id),
+    itemName: item.itemName || itemTypeLabel(item.itemType),
+    regionCode: item.regionCode,
+    unitPrice: Number(item.unitPrice || 0),
+    quantity: Number(item.quantity || 1),
+    completedQuantity: Number(item.completedQuantity || 0)
+  }))
+  pausedEditDialogVisible.value = true
+}
 
+async function savePausedEdit() {
+  const order = pausedEditOrder.value
+  if (!order) return
+  if (pausedEditItems.value.some((item) =>
+    !Number.isInteger(item.quantity)
+    || item.quantity < 1
+    || !Number.isInteger(item.completedQuantity)
+    || item.completedQuantity < 0
+    || item.completedQuantity > item.quantity
+  )) {
+    ElMessage.warning(t('ordersPage.pausedEditQuantityInvalid'))
+    return
+  }
+  savingPausedEdit.value = true
+  try {
+    await updatePausedAdminOrder(order.id, pausedEditItems.value.map((item) => ({
+      itemId: item.itemId,
+      quantity: item.quantity,
+      completedQuantity: item.completedQuantity
+    })))
+    ElMessage.success(t('ordersPage.pausedEditSuccess'))
+    pausedEditDialogVisible.value = false
+    await loadOrders()
+  } catch {
+    ElMessage.error(t('ordersPage.pausedEditFailed'))
+  } finally {
+    savingPausedEdit.value = false
+  }
+}
 async function resumeOrder(order: OrderRow) {
   if (isAuditRow(order)) return
   try {
@@ -747,11 +967,15 @@ async function batchPause() {
     return
   }
   try {
-    await ElMessageBox.confirm(t('ordersPage.batchPauseConfirm', { count: pausable.length }), t('ordersPage.batchPause'), {
-      type: 'warning',
-      confirmButtonText: t('ordersPage.pause'),
-      cancelButtonText: t('ordersPage.keepOrder')
-    })
+    await ElMessageBox.confirm(
+      t('ordersPage.batchPauseConfirm', { count: pausable.length }),
+      t('ordersPage.batchPause'),
+      {
+        type: 'warning',
+        confirmButtonText: t('ordersPage.pause'),
+        cancelButtonText: t('ordersPage.keepOrder')
+      }
+    )
     await batchPauseAdminOrders(pausable.map((order) => order.id))
     ElMessage.success(t('ordersPage.batchPauseSuccess'))
     selectedOrders.value = []
@@ -762,7 +986,6 @@ async function batchPause() {
     }
   }
 }
-
 function handleSelectionChange(selection: OrderRow[]) {
   selectedOrders.value = selection.filter((row) => !isAuditRow(row))
 }
@@ -783,11 +1006,18 @@ function openReviewAudit(row: OrderRow) {
   selectedAudit.value = row.audit
   reviewForm.negotiatedContent = row.audit.negotiatedContent || row.audit.requestedContent || ''
   reviewForm.negotiatedPrice = Number(row.audit.negotiatedPrice || 0)
+  reviewForm.itemPricing = row.audit.items.map((item) => ({
+    itemId: Number(item.id),
+    name: row.audit.orderType === 'CHART_RANK_GUARANTEE' ? (item.chartType || item.keyword) : item.keyword,
+    unitPrice: Number(item.unitPrice || 0),
+    executionDays: Number(item.executionDays || 1)
+  }))
   reviewDialogVisible.value = true
 }
 
 async function submitReviewAudit() {
-  if (!selectedAudit.value || !reviewForm.negotiatedContent.trim() || reviewForm.negotiatedPrice <= 0) {
+  if (!selectedAudit.value || !reviewForm.negotiatedContent.trim()
+    || (reviewUsesItemPricing.value ? reviewForm.itemPricing.some(item => item.unitPrice <= 0 || item.executionDays <= 0) : reviewForm.negotiatedPrice <= 0)) {
     ElMessage.warning(t('specialAudit.reviewRequired'))
     return
   }
@@ -795,7 +1025,8 @@ async function submitReviewAudit() {
   try {
     await reviewSpecialAudit(selectedAudit.value.id, {
       negotiatedContent: reviewForm.negotiatedContent.trim(),
-      negotiatedPrice: reviewForm.negotiatedPrice
+      negotiatedPrice: reviewUsesItemPricing.value ? reviewCalculatedPrice.value : reviewForm.negotiatedPrice,
+      itemPricing: reviewUsesItemPricing.value ? reviewForm.itemPricing.map(({ itemId, unitPrice, executionDays }) => ({ itemId, unitPrice, executionDays })) : undefined
     })
     ElMessage.success(t('specialAudit.reviewSuccess'))
     reviewDialogVisible.value = false
@@ -828,6 +1059,10 @@ function withExportCustomer(row: OrderRow): OrderRow {
 
 function typeLabel(type?: string | null) {
   return type ? t(`ordersPage.types.${type}`) : '-'
+}
+
+function orderTypeLabel(order: Order) {
+  return order.orderModuleName?.trim() || typeLabel(order.orderType)
 }
 
 function statusLabel(status?: OrderListStatus | null) {
@@ -874,6 +1109,14 @@ function formatDateTime(value?: string | null) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-'
 }
 
+function valueOrDash(value?: number | string | null) {
+  return value === null || value === undefined || value === '' ? '-' : value
+}
+
+function money(value?: number | null) {
+  return value === null || value === undefined ? '-' : `$${Number(value).toFixed(2)}`
+}
+
 function statusTagType(status?: OrderListStatus | null) {
   if (status === 'PENDING_REVIEW') return 'warning'
   if (status === 'APPROVED_WAIT_SUBMIT') return 'danger'
@@ -891,13 +1134,13 @@ function statusTagType(status?: OrderListStatus | null) {
 
 <style scoped>
 .orders-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .query-panel {
   margin-bottom: 16px;
   padding: 16px 16px 14px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -973,13 +1216,13 @@ function statusTagType(status?: OrderListStatus | null) {
 .selection-note {
   min-height: 22px;
   margin-bottom: 8px;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
 .table-card {
   overflow: hidden;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -995,7 +1238,7 @@ function statusTagType(status?: OrderListStatus | null) {
 
 .orders-table :deep(.el-table__header th) {
   background: #f6f7f9;
-  color: #667085;
+  color: #64748b;
   font-weight: 500;
 }
 
@@ -1007,7 +1250,7 @@ function statusTagType(status?: OrderListStatus | null) {
 }
 
 .order-no {
-  color: #344054;
+  color: #334155;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   white-space: nowrap;
@@ -1031,7 +1274,7 @@ function statusTagType(status?: OrderListStatus | null) {
 .customer-cell strong,
 .customer-option strong {
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -1070,8 +1313,8 @@ function statusTagType(status?: OrderListStatus | null) {
   justify-content: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #eef4ff;
-  color: #2d7dd2;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 700;
 }
 
@@ -1103,30 +1346,72 @@ function statusTagType(status?: OrderListStatus | null) {
   padding: 0 8px;
   border-radius: 4px;
   background: #f2f4f7;
-  color: #475467;
+  color: #475569;
   font-size: 12px;
   line-height: 22px;
 }
 
 .store-badge {
-  background: #eef4ff;
-  color: #175cd3;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .muted {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
 .row-actions {
-  display: flex;
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   justify-content: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 2px 0;
+}
+
+.row-actions :deep(.el-button) {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  margin-left: 0;
+  padding: 5px 8px;
+  justify-content: center;
 }
 
 .row-actions :deep(.el-button + .el-button) {
   margin-left: 0;
+}
+
+.row-actions .action-detail {
+  border-radius: 6px;
+  background: #eff6ff;
+}
+
+.more-actions,
+.more-actions :deep(.el-tooltip__trigger),
+.more-actions :deep(.el-button) {
+  width: 100%;
+}
+
+.danger-menu-item {
+  color: #dc2626;
+}
+
+.review-price-total {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 20px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.review-price-total strong {
+  color: #dc2626;
+  font-size: 20px;
 }
 
 .app-option {
@@ -1146,8 +1431,8 @@ function statusTagType(status?: OrderListStatus | null) {
   justify-content: center;
   overflow: hidden;
   border-radius: 7px;
-  background: #eef4ff;
-  color: #2f7df4;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -1166,7 +1451,7 @@ function statusTagType(status?: OrderListStatus | null) {
 
 .app-option-copy strong {
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -1218,7 +1503,7 @@ function statusTagType(status?: OrderListStatus | null) {
 
 .region-option-copy strong {
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -1232,13 +1517,13 @@ function statusTagType(status?: OrderListStatus | null) {
 }
 
 .all-region-icon {
-  background: #fff3e6;
-  color: #ff6a00;
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .region-option-icon {
   background: #f2f4f7;
-  color: #475467;
+  color: #475569;
 }
 
 :global(.order-app-select-dropdown .el-select-dropdown__list),
@@ -1329,5 +1614,39 @@ function statusTagType(status?: OrderListStatus | null) {
     flex: 1 1 calc(50% - 4px);
     margin-left: 0;
   }
+}
+.paused-edit-tip {
+  margin: 0 0 16px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.paused-item-region {
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.paused-edit-summary {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.paused-edit-summary .refund {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.paused-edit-summary .debit {
+  color: #dc2626;
+  font-weight: 700;
 }
 </style>

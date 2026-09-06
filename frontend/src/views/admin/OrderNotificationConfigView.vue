@@ -221,7 +221,7 @@ function formatDate(value: string | null | undefined) {
 
 <style scoped>
 .mail-config-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .config-grid {
@@ -233,7 +233,7 @@ function formatDate(value: string | null | undefined) {
 
 .config-card,
 .preview-card {
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 14px 32px rgb(16 24 40 / 5%);
@@ -276,7 +276,7 @@ h3 {
 
 .card-heading p {
   margin: 6px 0 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.6;
 }
 
@@ -318,7 +318,7 @@ h3 {
 }
 
 .updated-at {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -332,7 +332,7 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   margin: 18px 0;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
 }
 

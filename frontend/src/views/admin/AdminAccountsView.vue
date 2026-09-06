@@ -1,16 +1,16 @@
-﻿<template>
+<template>
   <section class="admin-permission-page">
     <div class="permission-layout">
       <aside class="admin-list-panel">
         <div class="panel-head">
-          <strong>管理员列表</strong>
-          <el-button type="primary" link :icon="Plus" @click="openCreateDialog">新增管理员</el-button>
+          <div><strong>{{ t('adminAccounts.adminList') }}</strong><span>{{ t('adminAccounts.accountCount', { count: filteredAdmins.length }) }}</span></div>
+          <el-button type="primary" link :icon="Plus" @click="openCreateDialog">{{ t('adminAccounts.addAdmin') }}</el-button>
         </div>
         <el-input
           v-model.trim="adminKeyword"
           class="admin-search"
           clearable
-          placeholder="搜索管理员"
+          :placeholder="t('adminAccounts.searchAdmin')"
           :prefix-icon="Search"
         />
         <el-scrollbar class="admin-scroll">
@@ -31,15 +31,12 @@
                   {{ t(`customers.statuses.${admin.status}`) }}
                 </el-tag>
                 <el-tag v-if="admin.roleCode === 'SUPER_ADMIN'" size="small" type="danger" effect="light">
-                  超级管理员
-                </el-tag>
-                <el-tag v-else v-for="roleKey in admin.roleKeys" :key="roleKey" size="small" effect="light">
-                  {{ roleName(roleKey) }}
+                  {{ t('adminAccounts.superAdmin') }}
                 </el-tag>
               </span>
             </span>
           </button>
-          <el-empty v-if="!loading && filteredAdmins.length === 0" description="暂无管理员" />
+          <el-empty v-if="!loading && filteredAdmins.length === 0" :description="t('adminAccounts.noAdmins')" />
         </el-scrollbar>
       </aside>
 
@@ -57,7 +54,7 @@
                     effect="light"
                     round
                   >
-                    超级管理员
+                    {{ t('adminAccounts.superAdmin') }}
                   </el-tag>
                 </div>
                 <p>
@@ -73,38 +70,38 @@
                 :disabled="selectedAdmin.id === auth.accountId"
                 @click="changeStatus(selectedAdmin, 'ENABLED')"
               >
-                启用
+                {{ t('adminAccounts.enable') }}
               </el-button>
               <el-button
                 v-if="selectedAdmin.status !== 'DISABLED'"
                 :disabled="selectedAdmin.id === auth.accountId"
                 @click="changeStatus(selectedAdmin, 'DISABLED')"
               >
-                禁用
+                {{ t('adminAccounts.disable') }}
               </el-button>
-              <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
+              <el-button :icon="Refresh" :loading="loading" @click="loadAll">{{ t('adminAccounts.refresh') }}</el-button>
             </div>
           </div>
 
           <div class="summary-grid">
             <div class="summary-item">
-              <span>账号 ID</span>
+              <span>{{ t('adminAccounts.accountId') }}</span>
               <strong>{{ selectedAdmin.id }}</strong>
             </div>
             <div class="summary-item">
-              <span>状态</span>
+              <span>{{ t('adminAccounts.status') }}</span>
               <strong>
-                <el-tag size="small" :type="statusTag(selectedAdmin.status)" effect="light">
-                  {{ t(`customers.statuses.${selectedAdmin.status}`) }}
-                </el-tag>
+                <span class="account-status" :class="selectedAdmin.status.toLowerCase()">
+                  <i></i>{{ t(`customers.statuses.${selectedAdmin.status}`) }}
+                </span>
               </strong>
             </div>
             <div class="summary-item">
-              <span>最后登录</span>
+              <span>{{ t('adminAccounts.lastLogin') }}</span>
               <strong>{{ formatDate(selectedAdmin.lastLoginAt) }}</strong>
             </div>
             <div class="summary-item">
-              <span>创建时间</span>
+              <span>{{ t('adminAccounts.createdAt') }}</span>
               <strong>{{ formatDate(selectedAdmin.createdAt) }}</strong>
             </div>
           </div>
@@ -115,24 +112,23 @@
             type="primary"
             show-icon
             :closable="false"
-            title="超级管理员拥有系统全部菜单和接口权限，无法修改权限配置。"
+            :title="t('adminAccounts.superAdminNotice')"
           />
 
-
-
-          <div class="permission-card">
+          <div class="permission-card" :class="{ 'is-readonly': selectedAdmin.roleCode === 'SUPER_ADMIN' }">
             <div class="permission-toolbar">
-              <strong>权限信息</strong>
+              <div class="permission-heading"><strong>{{ t('adminAccounts.permissions') }}</strong><span>{{ t('adminAccounts.permissionHint') }}</span></div>
               <div class="permission-tools">
+                <el-button v-if="selectedAdmin.roleCode !== 'SUPER_ADMIN'" type="primary" :loading="savingPermissions" @click="savePermissions">{{ t('adminAccounts.savePermissions') }}</el-button>
                 <el-input
                   v-model.trim="permissionKeyword"
                   class="permission-search"
                   clearable
-                  placeholder="搜索权限名称或标识"
+                  :placeholder="t('adminAccounts.searchPermission')"
                   :prefix-icon="Search"
                 />
-                <el-button :icon="Expand" @click="expandAll">展开全部</el-button>
-                <el-button :icon="Fold" @click="collapseAll">收起全部</el-button>
+                <el-button :icon="Expand" @click="expandAll">{{ t('adminAccounts.expandAll') }}</el-button>
+                <el-button :icon="Fold" @click="collapseAll">{{ t('adminAccounts.collapseAll') }}</el-button>
               </div>
             </div>
 
@@ -142,56 +138,54 @@
               :data="permissionRows"
               row-key="id"
               default-expand-all
+              @select="handlePermissionSelect"
+              @selection-change="handlePermissionSelection"
               :tree-props="{ children: 'children' }"
-              empty-text="暂无权限"
+              :empty-text="t('adminAccounts.noPermissions')"
             >
               <el-table-column type="selection" width="44" />
-              <el-table-column prop="nameZh" label="权限名称" min-width="180" />
-              <el-table-column label="权限标识" min-width="180">
+              <el-table-column :label="t('adminAccounts.permissionName')" min-width="180"><template #default="{ row }">{{ permissionName(row) }}</template></el-table-column>
+              <el-table-column :label="t('adminAccounts.permissionCode')" min-width="180">
                 <template #default="{ row }">
                   {{ row.permissionCode || row.menuCode || '-' }}
                 </template>
               </el-table-column>
-              <el-table-column label="类型" width="110">
+              <el-table-column :label="t('adminAccounts.type')" width="110">
                 <template #default="{ row }">{{ menuTypeLabel(row.menuType) }}</template>
               </el-table-column>
-              <el-table-column label="描述" min-width="180">
+              <el-table-column :label="t('adminAccounts.description')" min-width="180">
                 <template #default="{ row }">{{ rowDescription(row) }}</template>
               </el-table-column>
             </el-table>
           </div>
         </template>
 
-        <el-empty v-else description="请选择左侧管理员" />
+        <el-empty v-else :description="t('adminAccounts.selectAdmin')" />
       </section>
     </div>
 
-    <el-dialog v-model="createDialogVisible" title="新增管理员" width="460px">
+    <el-dialog append-to-body v-model="createDialogVisible" :title="t('adminAccounts.createTitle')" width="460px">
       <el-form label-position="top" class="create-form">
-        <el-form-item label="用户名" required>
+        <el-form-item :label="t('auth.username')" required>
           <el-input v-model.trim="createForm.username" maxlength="64" />
         </el-form-item>
-        <el-form-item label="邮箱" required>
+        <el-form-item :label="t('auth.email')" required>
           <el-input v-model.trim="createForm.email" maxlength="128" />
         </el-form-item>
-        <el-form-item label="初始密码" required>
+        <el-form-item :label="t('adminAccounts.password')" required>
           <el-input
             v-model="createForm.password"
             type="password"
             maxlength="72"
             show-password
-            placeholder="请输入 8-72 位初始密码"
+            :placeholder="t('adminAccounts.passwordPlaceholder')"
           />
         </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="createForm.roleIds" multiple collapse-tags collapse-tags-tooltip placeholder="请选择角色">
-            <el-option v-for="role in assignableRoles" :key="role.id" :label="role.roleName" :value="role.id" />
-          </el-select>
-        </el-form-item>
+
       </el-form>
       <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="submitCreate">确定</el-button>
+        <el-button @click="createDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="creating" @click="submitCreate">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </section>
@@ -204,7 +198,9 @@ import { ElMessage, ElMessageBox, type TableInstance } from 'element-plus'
 import { CopyDocument, Expand, Fold, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
   createAdminAccount,
+  getAdminAccountPermissions,
   getAdminAccounts,
+  updateAdminAccountPermissions,
   updateAdminAccountRoles,
   updateAdminAccountStatus,
   type AdminAccount
@@ -217,11 +213,12 @@ interface PermissionNode extends AdminMenu {
   children?: PermissionNode[]
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const auth = useAuthStore()
 const loading = ref(false)
 const creating = ref(false)
 const savingRoles = ref(false)
+const savingPermissions = ref(false)
 const createDialogVisible = ref(false)
 const adminKeyword = ref('')
 const permissionKeyword = ref('')
@@ -231,6 +228,8 @@ const menus = ref<AdminMenu[]>([])
 const selectedAdmin = ref<AdminAccount | null>(null)
 const selectedRoleIds = ref<number[]>([])
 const permissionTableRef = ref<TableInstance>()
+const selectedPermissionIds = ref<number[]>([])
+const syncingPermissionSelection = ref(false)
 const displayParentByPermission: Record<string, string> = {
   'app:add': 'applications',
   'app:delete': 'applications',
@@ -250,10 +249,7 @@ const createForm = reactive({
 const assignableRoles = computed(() => roleOptions.value.filter((role) => role.roleKey !== 'SUPER_ADMIN' && role.status === 'ENABLED'))
 const selectedRoles = computed(() => roleOptions.value.filter((role) => selectedRoleIds.value.includes(role.id)))
 const selectedMenuIdSet = computed(() => {
-  if (selectedAdmin.value?.roleCode === 'SUPER_ADMIN') {
-    return new Set(menus.value.map((menu) => menu.id))
-  }
-  return new Set(selectedRoles.value.flatMap((role) => role.menuIds || []))
+  return new Set(menus.value.map((menu) => menu.id))
 })
 const filteredAdmins = computed(() => {
   const keyword = adminKeyword.value.toLowerCase()
@@ -288,10 +284,82 @@ const permissionRows = computed(() => {
 
 onMounted(loadAll)
 
-watch(selectedAdmin, (admin) => {
+watch(selectedAdmin, async (admin) => {
   selectedRoleIds.value = admin?.roleIds ? [...admin.roleIds] : []
   permissionKeyword.value = ''
+  selectedPermissionIds.value = admin ? await getAdminAccountPermissions(admin.id) : []
+  await nextTick()
+  syncPermissionSelection()
 })
+
+function handlePermissionSelection(rows: PermissionNode[]) {
+  if (syncingPermissionSelection.value) return
+  selectedPermissionIds.value = rows.map((row) => row.id)
+}
+
+async function handlePermissionSelect(selection: PermissionNode[], row: PermissionNode) {
+  if (syncingPermissionSelection.value) return
+  syncingPermissionSelection.value = true
+  const checked = selection.some((item) => item.id === row.id)
+  function toggleChildren(node: PermissionNode) {
+    node.children?.forEach((child) => {
+      permissionTableRef.value?.toggleRowSelection(child, checked)
+      toggleChildren(child)
+    })
+  }
+  toggleChildren(row)
+  if (checked) {
+    const byId = new Map(menus.value.map((menu) => [menu.id, menu]))
+    let parentId = row.parentId
+    while (parentId && byId.has(parentId)) {
+      const parent = byId.get(parentId)!
+      const parentRow = findPermissionRow(permissionRows.value, parent.id)
+      if (parentRow) permissionTableRef.value?.toggleRowSelection(parentRow, true)
+      parentId = parent.parentId
+    }
+  }
+  await nextTick()
+  const selectedRows = (permissionTableRef.value?.getSelectionRows() || []) as PermissionNode[]
+  selectedPermissionIds.value = selectedRows.map((item) => item.id)
+  syncingPermissionSelection.value = false
+}
+
+function findPermissionRow(rows: PermissionNode[], id: number): PermissionNode | undefined {
+  for (const row of rows) {
+    if (row.id === id) return row
+    const child = row.children?.length ? findPermissionRow(row.children, id) : undefined
+    if (child) return child
+  }
+  return undefined
+}
+
+async function syncPermissionSelection() {
+  const selected = new Set(selectedPermissionIds.value)
+  syncingPermissionSelection.value = true
+  permissionTableRef.value?.clearSelection()
+  function apply(rows: PermissionNode[]) {
+    rows.forEach((row) => {
+      if (selected.has(row.id)) permissionTableRef.value?.toggleRowSelection(row, true)
+      if (row.children?.length) apply(row.children)
+    })
+  }
+  apply(permissionRows.value)
+  await nextTick()
+  syncingPermissionSelection.value = false
+}
+
+async function savePermissions() {
+  if (!selectedAdmin.value || selectedAdmin.value.roleCode === 'SUPER_ADMIN') return
+  savingPermissions.value = true
+  try {
+    selectedPermissionIds.value = await updateAdminAccountPermissions(selectedAdmin.value.id, selectedPermissionIds.value)
+    ElMessage.success(t('adminAccounts.permissionsSaved'))
+  } catch {
+    ElMessage.error(t('adminAccounts.permissionsSaveFailed'))
+  } finally {
+    savingPermissions.value = false
+  }
+}
 
 async function loadAll() {
   loading.value = true
@@ -306,7 +374,7 @@ async function loadAll() {
       selectedAdmin.value = nextAdmins[0] || null
     }
   } catch {
-    ElMessage.error('管理员权限数据加载失败')
+    ElMessage.error(t('adminAccounts.permissionLoadFailed'))
   } finally {
     loading.value = false
   }
@@ -326,7 +394,7 @@ function openCreateDialog() {
 
 async function submitCreate() {
   if (!createForm.username.trim() || !createForm.email.trim() || createForm.password.length < 8) {
-    ElMessage.warning('请填写用户名、邮箱和至少 8 位初始密码')
+    ElMessage.warning(t('adminAccounts.createRequired'))
     return
   }
   creating.value = true
@@ -337,13 +405,13 @@ async function submitCreate() {
       password: createForm.password,
       roleIds: createForm.roleIds
     })
-    ElMessage.success('管理员已创建')
+    ElMessage.success(t('adminAccounts.createSuccess'))
     createDialogVisible.value = false
     await loadAll()
     await nextTick()
     selectedAdmin.value = admins.value.find((admin) => admin.id === created.id) || selectedAdmin.value
   } catch {
-    ElMessage.error('管理员创建失败')
+    ElMessage.error(t('adminAccounts.createFailed'))
   } finally {
     creating.value = false
   }
@@ -352,18 +420,18 @@ async function submitCreate() {
 async function submitRoles() {
   if (!selectedAdmin.value || selectedAdmin.value.roleCode === 'SUPER_ADMIN') return
   if (selectedRoleIds.value.length === 0) {
-    ElMessage.warning('请至少选择一个角色')
+    ElMessage.warning(t('adminAccounts.roleRequired'))
     return
   }
   savingRoles.value = true
   try {
     const updated = await updateAdminAccountRoles(selectedAdmin.value.id, selectedRoleIds.value)
-    ElMessage.success('管理员权限已更新')
+    ElMessage.success(t('adminAccounts.permissionsSaved'))
     const index = admins.value.findIndex((admin) => admin.id === updated.id)
     if (index >= 0) admins.value[index] = updated
     selectedAdmin.value = updated
   } catch {
-    ElMessage.error('管理员权限保存失败')
+    ElMessage.error(t('adminAccounts.permissionsSaveFailed'))
   } finally {
     savingRoles.value = false
   }
@@ -372,19 +440,19 @@ async function submitRoles() {
 async function changeStatus(row: AdminAccount, status: AccountStatus) {
   const statusText = t(`customers.statuses.${status}`)
   try {
-    await ElMessageBox.confirm(`确认将管理员“${row.username}”状态改为“${statusText}”吗？`, '调整管理员状态', {
+    await ElMessageBox.confirm(t('adminAccounts.confirmStatusMessage', { name: row.username, status: statusText }), t('adminAccounts.statusTitle'), {
       type: 'warning',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消'
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel')
     })
     const updated = await updateAdminAccountStatus(row.id, status)
-    ElMessage.success('管理员状态已更新')
+    ElMessage.success(t('adminAccounts.statusUpdated'))
     const index = admins.value.findIndex((admin) => admin.id === updated.id)
     if (index >= 0) admins.value[index] = updated
     selectedAdmin.value = updated
   } catch (error) {
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error('管理员状态更新失败')
+      ElMessage.error(t('adminAccounts.statusUpdateFailed'))
     }
   }
 }
@@ -393,9 +461,9 @@ async function copyEmail() {
   if (!selectedAdmin.value?.email) return
   try {
     await navigator.clipboard.writeText(selectedAdmin.value.email)
-    ElMessage.success('邮箱已复制')
+    ElMessage.success(t('adminAccounts.emailCopied'))
   } catch {
-    ElMessage.warning('复制失败，请手动复制')
+    ElMessage.warning(t('adminAccounts.copyFailed'))
   }
 }
 
@@ -466,17 +534,51 @@ function statusTag(status: AccountStatus) {
 }
 
 function menuTypeLabel(type: MenuType) {
-  const labels: Record<MenuType, string> = {
-    CATALOG: '目录',
-    MENU: '菜单',
-    BUTTON: '按钮'
+  const labels = {
+    'zh-CN': { CATALOG:'目录', MENU:'菜单', BUTTON:'按钮' },
+    'en-US': { CATALOG:'Catalog', MENU:'Menu', BUTTON:'Action' },
+    'ru-RU': { CATALOG:'Раздел', MENU:'Меню', BUTTON:'Действие' },
+    'pt-PT': { CATALOG:'Secção', MENU:'Menu', BUTTON:'Ação' },
+    'es-ES': { CATALOG:'Sección', MENU:'Menú', BUTTON:'Acción' }
   }
-  return labels[type]
+  return (labels[locale.value as keyof typeof labels] || labels['en-US'])[type]
 }
 
 function rowDescription(row: AdminMenu) {
-  if (row.menuType === 'BUTTON') return row.nameZh
-  return `${row.nameZh}模块`
+  const name = permissionName(row)
+  if (row.menuType === 'BUTTON') return name
+  const suffix = { 'zh-CN':'模块','en-US':' module','ru-RU':' — модуль','pt-PT':' — módulo','es-ES':' — módulo' }[locale.value] || ' module'
+  return `${name}${suffix}`
+}
+
+function permissionName(row: AdminMenu) {
+  if (locale.value === 'zh-CN') return row.nameZh
+  const menuKeys: Record<string, string> = {
+    dashboard:'menu.home', customers:'menu.customers', promotion:'menu.promotion', applications:'menu.applications',
+    orderExecution:'menu.orderExecution', 'orderExecution.pending':'menu.pendingExecutionOrders',
+    'orderExecution.executing':'menu.executingOrders', 'orderExecution.completed':'menu.completedOrders',
+    orders:'menu.orders', 'orders.pendingReview':'menu.pendingReviewOrders', 'orders.pendingConfirm':'menu.pendingConfirmOrders',
+    'orders.apple':'menu.appleOrders', 'orders.google':'menu.googleOrders', 'orders.ipad':'menu.ipadOrders',
+    finance:'menu.finance', 'finance.transactions':'menu.financeTransactions', 'finance.recharges':'menu.rechargeRecords',
+    system:'menu.systemManagement', 'system.homeMetrics':'menu.homeMetricsConfig', 'system.pricing':'menu.pricing', 'system.walletTypes':'menu.walletTransactionTypeConfig',
+    'system.customerService':'menu.customerServiceConfig', 'system.mail':'menu.mailConfig', 'system.regions':'menu.regions',
+    'system.adminAccounts':'menu.adminAccounts', 'system.settings':'menu.settings'
+  }
+  if (row.menuCode && menuKeys[row.menuCode]) return t(menuKeys[row.menuCode])
+  const actions: Record<string, Record<string, string>> = {
+    'customer:status': { 'ru-RU':'Включение и отключение пользователей','pt-PT':'Ativar ou desativar utilizadores','es-ES':'Activar o desactivar usuarios' },
+    'order:create': { 'ru-RU':'Создание заказа для клиента','pt-PT':'Criar encomenda para cliente','es-ES':'Crear pedido para cliente' },
+    'app:add': { 'ru-RU':'Добавление приложения','pt-PT':'Adicionar aplicação','es-ES':'Añadir aplicación' },
+    'app:delete': { 'ru-RU':'Удаление приложения','pt-PT':'Eliminar aplicação','es-ES':'Eliminar aplicación' },
+    'order:confirm': { 'ru-RU':'Подтверждение заказа','pt-PT':'Confirmar encomenda','es-ES':'Confirmar pedido' },
+    'order:execute': { 'ru-RU':'Выполнение заказа','pt-PT':'Executar encomenda','es-ES':'Ejecutar pedido' },
+    'order:pause': { 'ru-RU':'Приостановка заказа','pt-PT':'Pausar encomenda','es-ES':'Pausar pedido' },
+    'order:resume': { 'ru-RU':'Возобновление заказа','pt-PT':'Retomar encomenda','es-ES':'Reanudar pedido' },
+    'order:cancel': { 'ru-RU':'Отмена заказа','pt-PT':'Cancelar encomenda','es-ES':'Cancelar pedido' },
+    'order:export': { 'ru-RU':'Экспорт заказов','pt-PT':'Exportar encomendas','es-ES':'Exportar pedidos' },
+    'wallet:adjust': { 'ru-RU':'Корректировка баланса','pt-PT':'Ajustar saldo','es-ES':'Ajustar saldo' }
+  }
+  return actions[row.permissionCode || '']?.[locale.value] || row.nameEn || row.nameZh
 }
 
 function formatDate(value: string | undefined | null) {
@@ -486,13 +588,13 @@ function formatDate(value: string | undefined | null) {
 
 <style scoped>
 .admin-permission-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .permission-layout {
   min-height: 680px;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -500,7 +602,7 @@ function formatDate(value: string | undefined | null) {
 .detail-panel {
   min-width: 0;
   border: 1px solid #e5eaf3;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
 }
 
@@ -512,12 +614,13 @@ function formatDate(value: string | undefined | null) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 18px 10px;
+  padding: 17px 18px 11px;
+  border-bottom: 1px solid #edf1f7;
 }
 
-.panel-head strong {
-  font-size: 15px;
-}
+.panel-head > div { display: flex; flex-direction: column; gap: 3px; }
+.panel-head strong { font-size: 15px; }
+.panel-head span { color: #94a3b8; font-size: 11px; }
 
 .admin-search {
   width: calc(100% - 32px);
@@ -557,8 +660,8 @@ function formatDate(value: string | undefined | null) {
   justify-content: center;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #ffb11b;
-  color: #d9361f;
+  background: #fbbf24;
+  color: #92400e;
   font-weight: 800;
 }
 
@@ -580,7 +683,7 @@ function formatDate(value: string | undefined | null) {
 
 .admin-email {
   overflow: hidden;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -626,7 +729,7 @@ function formatDate(value: string | undefined | null) {
 
 .profile-title h2 {
   margin: 0;
-  color: #182230;
+  color: #0f172a;
   font-size: 24px;
   line-height: 1.2;
 }
@@ -636,7 +739,7 @@ function formatDate(value: string | undefined | null) {
   align-items: center;
   gap: 4px;
   margin: 6px 0 0;
-  color: #667085;
+  color: #64748b;
 }
 
 .copy-button {
@@ -671,21 +774,42 @@ function formatDate(value: string | undefined | null) {
 .summary-item span {
   display: block;
   margin-bottom: 8px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
 .summary-item strong {
-  color: #182230;
+  color: #0f172a;
   font-size: 14px;
 }
 
+.account-status {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid #dbe4ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.account-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.account-status.enabled { border-color: #bbf7d0; background: #f0fdf4; color: #15803d; }
+.account-status.disabled { border-color: #fecaca; background: #fef2f2; color: #dc2626; }
 .super-alert {
   margin: 16px 0;
 }
 
 .permission-card {
-  margin-top: 16px;
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 .permission-toolbar {
@@ -693,12 +817,14 @@ function formatDate(value: string | undefined | null) {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  padding: 15px 16px;
+  border-bottom: 1px solid #e8edf4;
+  background: #fbfcfe;
 }
 
-.permission-toolbar strong {
-  font-size: 16px;
-}
+.permission-heading { display: flex; flex-direction: column; gap: 5px; min-width: 220px; }
+.permission-heading strong { font-size: 16px; line-height: 1.2; }
+.permission-heading span { color: #64748b; font-size: 12px; line-height: 1.4; }
 
 .permission-tools {
   display: flex;
@@ -710,15 +836,39 @@ function formatDate(value: string | undefined | null) {
   width: 260px;
 }
 
+.permission-card.is-readonly :deep(.el-table__header-wrapper .el-checkbox),
+.permission-card.is-readonly :deep(.el-table__body-wrapper .el-checkbox) {
+  pointer-events: none;
+}
+.permission-card.is-readonly :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  opacity: .72;
+}
 .permission-table {
-  border: 1px solid #edf1f7;
-  border-radius: 6px;
+  border: 0;
+  border-radius: 0;
 }
 
 :deep(.permission-table .el-table__cell) {
   padding: 8px 0;
 }
 
+.role-card {
+  margin: 16px 0 0;
+  padding: 16px;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.section-heading > div { display: flex; flex-direction: column; gap: 4px; }
+.section-heading strong { font-size: 16px; }
+.section-heading span { color: #64748b; font-size: 12px; }
+.role-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.role-options :deep(.el-checkbox) { width: 100%; height: auto; min-height: 54px; margin: 0; padding: 10px 12px; background: #fff; }
+.role-option { display: flex; flex-direction: column; gap: 3px; }
+.role-option strong { color: #0f172a; font-size: 13px; }
+.role-option small { color: #94a3b8; font-size: 10px; }
+.super-role-note { padding: 11px 13px; border-radius: 8px; background: #fff; color: #64748b; font-size: 12px; }
 @media (max-width: 1080px) {
   .permission-layout,
   .summary-grid {

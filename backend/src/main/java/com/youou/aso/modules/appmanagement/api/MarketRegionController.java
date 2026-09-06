@@ -28,6 +28,7 @@ public class MarketRegionController {
                         region.getCode(),
                         region.getNameZh(),
                         region.getNameEn(),
+                        region.getNameRu(), region.getNamePt(), region.getNameEs(),
                         region.isSupportsAppStore(),
                         region.isSupportsGooglePlay(),
                         region.isSupportsIpadStore()

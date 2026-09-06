@@ -32,8 +32,18 @@ export function useWalletTransactionTypeLabels(scope: 'admin' | 'customer') {
   function transactionTypeLabel(type: WalletTransactionType | string | null | undefined) {
     if (!type) return '-'
     const config = configMap.value.get(type as WalletTransactionType)
-    if (!config) return t(`wallet.types.${type}`)
-    return locale.value === 'en-US' ? config.displayNameEn : config.displayNameZh
+    const translationKey = `wallet.types.${type}`
+    const translated = t(translationKey)
+    if (translated !== translationKey) return translated
+    if (!config) return type
+    const fields = {
+      'zh-CN': config.displayNameZh,
+      'en-US': config.displayNameEn,
+      'ru-RU': config.displayNameRu,
+      'pt-PT': config.displayNamePt,
+      'es-ES': config.displayNameEs
+    }
+    return fields[locale.value as keyof typeof fields] || config.displayNameEn
   }
 
   return {

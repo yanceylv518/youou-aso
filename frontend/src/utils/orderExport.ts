@@ -5,6 +5,7 @@ export interface ExportOrderRow {
   customerUsername?: string | null
   customerEmail?: string | null
   orderType?: OrderType | string | null
+  orderModuleName?: string | null
   storeType?: StoreType | string | null
   appIdentifier?: string | null
   status?: OrderListStatus | string | null
@@ -37,7 +38,7 @@ const ORDER_EXPORT_HEADERS = [
 export function exportOrdersCsv<T extends ExportOrderRow>(rows: T[], formatters: ExportOrderLabelFormatters<T>, filenamePrefix = 'order') {
   const lines = rows.map((row) => [
     row.customerEmail || row.customerUsername || '',
-    formatters.typeLabel(row.orderType),
+    row.orderModuleName?.trim() || formatters.typeLabel(row.orderType),
     formatters.storeLabel(row.storeType),
     row.appIdentifier || '',
     dateOnly(row.orderStartDate),

@@ -17,10 +17,11 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 
 @Service
 public class JdbcWalletService implements WalletService {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
     private final RowMapper<WalletAccount> rowMapper = (rs, rowNum) -> {
@@ -144,6 +145,17 @@ public class JdbcWalletService implements WalletService {
         return wallet.getBalance();
     }
 
+    @Override
+    public void linkTransactionToOrder(Long transactionId, Long orderId) {
+        if (transactionId == null || orderId == null) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE wallet_transaction SET related_order_id = ? WHERE id = ?",
+                orderId,
+                transactionId
+        );
+    }
     private Long insertTransaction(
             WalletAccount wallet,
             BigDecimal amount,
@@ -174,7 +186,7 @@ public class JdbcWalletService implements WalletService {
             ps.setBigDecimal(8, after);
             ps.setObject(9, null);
             ps.setString(10, remark);
-            ps.setObject(11, LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+            ps.setObject(11, LocalDateTime.ofInstant(clock.instant(), BUSINESS_ZONE));
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -185,7 +197,7 @@ public class JdbcWalletService implements WalletService {
     }
 
     private String generateTransactionNo() {
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), BUSINESS_ZONE);
         return BusinessNumberGenerator.generate("WT", now);
     }
 }

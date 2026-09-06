@@ -115,10 +115,18 @@
         <el-button type="primary" :icon="Check" :disabled="selectedOrders.length === 0" @click="batchConfirm">
           {{ t('ordersPage.batchConfirm') }}
         </el-button>
-        <el-button type="primary" color="#ff6a00" :icon="Search" @click="searchOrders">{{ t('ordersPage.search') }}</el-button>
+        <el-button type="primary" :icon="Search" @click="searchOrders">{{ t('ordersPage.search') }}</el-button>
         <el-button :icon="Delete" @click="resetFilters">{{ t('ordersPage.clear') }}</el-button>
         <el-button :icon="Refresh" @click="loadOrders">{{ t('ordersPage.refresh') }}</el-button>
         <el-button :icon="Download" @click="exportOrders">{{ t('ordersPage.export') }}</el-button>
+        <TableColumnSettings
+          v-model="visibleColumns"
+          :options="columnOptions"
+          :defaults="defaultColumnKeys"
+          :title="t('ordersPage.columnSettings')"
+          :select-all-text="t('ordersPage.selectAllColumns')"
+          :restore-defaults-text="t('ordersPage.restoreDefaultColumns')"
+        />
       </div>
     </div>
 
@@ -133,7 +141,8 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="48" />
-        <el-table-column :label="t('ordersPage.app')" min-width="260">
+        <el-table-column v-if="isColumnVisible('orderNo')" prop="orderNo" :label="t('ordersPage.orderNo')" min-width="190" />
+        <el-table-column v-if="isColumnVisible('app')" :label="t('ordersPage.app')" min-width="260">
           <template #default="{ row }">
             <div class="app-cell">
               <div class="app-icon">
@@ -149,7 +158,12 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.customer')" min-width="180">
+        <el-table-column v-if="isColumnVisible('appIdentifier')" prop="appIdentifier" :label="t('ordersPage.appIdentifier')" min-width="190" />
+        <el-table-column v-if="isColumnVisible('store')" :label="t('ordersPage.store')" min-width="120">
+          <template #default="{ row }">{{ storeLabel(row.storeType) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('region')" prop="regionCode" :label="t('ordersPage.region')" min-width="100" />
+        <el-table-column v-if="isColumnVisible('customer')" :label="t('ordersPage.customer')" min-width="180">
           <template #default="{ row }">
             <div class="customer-cell">
               <strong>{{ orderCustomerName(row) }}</strong>
@@ -157,26 +171,62 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.type')" min-width="150">
-          <template #default="{ row }">{{ typeLabel(row.orderType) }}</template>
+        <el-table-column v-if="isColumnVisible('type')" :label="t('ordersPage.type')" min-width="150">
+          <template #default="{ row }">{{ orderTypeLabel(row) }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.amount')" width="120" align="right">
+        <el-table-column v-if="isColumnVisible('orderCategory')" :label="t('ordersPage.orderCategory')" min-width="130">
+          <template #default="{ row }">{{ row.sourceAuditId ? t('ordersPage.categories.SPECIAL') : t('ordersPage.categories.REGULAR') }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="190">
+          <template #default="{ row }">{{ `${row.orderStartDate} - ${row.orderEndDate}` }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
+          <template #default="{ row }">{{ valueOrDash(row.totalDays) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('executionHours')" :label="t('orderDetail.executionHours')" min-width="120" align="right">
+          <template #default="{ row }">{{ valueOrDash(row.executionHours) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('quantity')" :label="t('ordersPage.quantity')" min-width="100" align="right">
+          <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
+          <template #default="{ row }">{{ money(row.unitPrice) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('amount')" :label="t('ordersPage.amount')" width="120" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.createdAt')" min-width="170">
+        <el-table-column v-if="isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
+          <template #default="{ row }">{{ money(row.refundAmount) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="120" align="center">
+          <template #default="{ row }">{{ t(`ordersPage.statuses.${row.status}`) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.expectedCompletedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('confirmedAt')" :label="t('orderDetail.confirmedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.confirmedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('executedAt')" :label="t('orderDetail.executedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.executedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('completedAt')" :label="t('orderDetail.completedAt')" min-width="170">
+          <template #default="{ row }">{{ formatDateTime(row.completedAt) }}</template>
+        </el-table-column>
+        <el-table-column v-if="isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column :label="t('ordersPage.actions')" width="170" fixed="right" align="center">
+        <el-table-column v-if="isColumnVisible('actions')" :label="t('ordersPage.actions')" width="190" fixed="right" align="center">
           <template #default="{ row }">
             <div class="row-actions">
               <el-button class="action-detail" size="small" text type="primary" :icon="View" @click="viewDetail(row)">
-                {{ t('ordersPage.detail') }}
+                {{ t('ordersPage.actionDetail') }}
               </el-button>
               <el-button class="action-confirm" size="small" type="primary" :icon="Check" @click="confirmOrder(row)">
-                {{ t('ordersPage.confirm') }}
+                {{ t('ordersPage.actionConfirm') }}
               </el-button>
               <el-button class="action-cancel" size="small" type="danger" plain @click="cancelOrder(row)">
-                {{ t('ordersPage.cancelOrder') }}
+                {{ t('ordersPage.actionCancel') }}
               </el-button>
             </div>
           </template>
@@ -208,10 +258,48 @@ import { batchConfirmAdminOrders, cancelAdminOrder, confirmAdminOrder, getAdminO
 import { getAdminApps, type CustomerApp, type StoreType } from '@/api/applications'
 import { getAdminCustomers, type CustomerAccount } from '@/api/customers'
 import StoreIcon from '@/components/StoreIcon.vue'
+import TableColumnSettings, { type TableColumnOption } from '@/components/TableColumnSettings.vue'
+import { usePersistentTableColumns } from '@/composables/usePersistentTableColumns'
 import { exportOrdersCsv } from '@/utils/orderExport'
 
 const router = useRouter()
 const { t } = useI18n()
+
+const defaultColumnKeys = ['app', 'customer', 'type', 'amount', 'createdAt', 'actions']
+const allColumnKeys = [
+  'orderNo', 'app', 'appIdentifier', 'store', 'region', 'customer', 'type', 'orderCategory', 'orderTime', 'totalDays',
+  'executionHours', 'quantity', 'unitPrice', 'amount', 'refundAmount', 'status', 'expectedCompletedAt', 'confirmedAt',
+  'executedAt', 'completedAt', 'createdAt', 'actions'
+]
+const { visibleColumns, isColumnVisible } = usePersistentTableColumns(
+  'youou.admin.pending-confirm-order-list.columns',
+  allColumnKeys,
+  defaultColumnKeys
+)
+const columnOptions = computed<TableColumnOption[]>(() => [
+  { key: 'orderNo', label: t('ordersPage.orderNo') },
+  { key: 'app', label: t('ordersPage.app') },
+  { key: 'appIdentifier', label: t('ordersPage.appIdentifier') },
+  { key: 'store', label: t('ordersPage.store') },
+  { key: 'region', label: t('ordersPage.region') },
+  { key: 'customer', label: t('ordersPage.customer') },
+  { key: 'type', label: t('ordersPage.type') },
+  { key: 'orderCategory', label: t('ordersPage.orderCategory') },
+  { key: 'orderTime', label: t('ordersPage.orderTime') },
+  { key: 'totalDays', label: t('orderDetail.totalDays') },
+  { key: 'executionHours', label: t('orderDetail.executionHours') },
+  { key: 'quantity', label: t('ordersPage.quantity') },
+  { key: 'unitPrice', label: t('ordersPage.unitPrice') },
+  { key: 'amount', label: t('ordersPage.amount') },
+  { key: 'refundAmount', label: t('ordersPage.refundAmount') },
+  { key: 'status', label: t('ordersPage.status') },
+  { key: 'expectedCompletedAt', label: t('ordersPage.expectedCompletedAt') },
+  { key: 'confirmedAt', label: t('orderDetail.confirmedAt') },
+  { key: 'executedAt', label: t('orderDetail.executedAt') },
+  { key: 'completedAt', label: t('orderDetail.completedAt') },
+  { key: 'createdAt', label: t('ordersPage.createdAt') },
+  { key: 'actions', label: t('ordersPage.actions') }
+])
 
 const orders = ref<Order[]>([])
 const selectedOrders = ref<Order[]>([])
@@ -249,6 +337,7 @@ const orderTypeOptions: OrderType[] = [
   'RATING',
   'REVIEW',
   'RANK_GUARANTEE',
+  'CHART_RANK_GUARANTEE',
   'KEYWORD_COVERAGE'
 ]
 
@@ -461,6 +550,10 @@ function typeLabel(type?: string | null) {
   return type ? t(`ordersPage.types.${type}`) : '-'
 }
 
+function orderTypeLabel(order: Order) {
+  return order.orderModuleName?.trim() || typeLabel(order.orderType)
+}
+
 function statusLabel(status?: string | null) {
   return status ? t(`ordersPage.statuses.${status}`) : '-'
 }
@@ -498,20 +591,24 @@ function formatDateTime(value?: string | null) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-'
 }
 
-function money(value: number) {
-  return `$${Number(value).toFixed(2)}`
+function valueOrDash(value?: number | string | null) {
+  return value === null || value === undefined || value === '' ? '-' : value
+}
+
+function money(value?: number | null) {
+  return value === null || value === undefined ? '-' : `$${Number(value).toFixed(2)}`
 }
 </script>
 
 <style scoped>
 .orders-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .query-panel {
   margin-bottom: 16px;
   padding: 16px 16px 14px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -576,7 +673,7 @@ function money(value: number) {
 
 .table-card {
   overflow: hidden;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -584,7 +681,7 @@ function money(value: number) {
 
 .selection-note {
   margin: 0 0 10px;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
@@ -602,7 +699,7 @@ function money(value: number) {
 
 .orders-table :deep(.el-table__header th) {
   background: #f6f7f9;
-  color: #667085;
+  color: #64748b;
   font-weight: 500;
 }
 
@@ -629,8 +726,8 @@ function money(value: number) {
   justify-content: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #eef4ff;
-  color: #2d7dd2;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 700;
 }
 
@@ -666,18 +763,18 @@ function money(value: number) {
   padding: 0 8px;
   border-radius: 4px;
   background: #f2f4f7;
-  color: #475467;
+  color: #475569;
   font-size: 12px;
   line-height: 22px;
 }
 
 .store-badge {
-  background: #eef4ff;
-  color: #175cd3;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .muted {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -699,7 +796,7 @@ function money(value: number) {
 .customer-cell strong,
 .customer-option strong {
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -726,7 +823,7 @@ function money(value: number) {
 .row-actions {
   display: grid;
   width: 100%;
-  grid-template-columns: 56px 64px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   justify-content: center;
   gap: 6px 8px;
@@ -745,19 +842,21 @@ function money(value: number) {
 }
 
 .row-actions .action-detail {
-  width: 56px;
-  padding-right: 0;
-  padding-left: 0;
+  width: 100%;
+  padding-right: 8px;
+  padding-left: 8px;
+  border-radius: 6px;
+  background: #eff6ff;
 }
 
 .row-actions .action-confirm,
 .row-actions .action-cancel {
-  width: 64px;
+  width: 100%;
 }
 
 .row-actions .action-cancel {
-  grid-column: 2;
-  grid-row: 2;
+  grid-column: auto;
+  grid-row: auto;
 }
 
 .app-option {
@@ -777,8 +876,8 @@ function money(value: number) {
   justify-content: center;
   overflow: hidden;
   border-radius: 7px;
-  background: #eef4ff;
-  color: #2f7df4;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -797,7 +896,7 @@ function money(value: number) {
 
 .app-option-copy strong {
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -851,7 +950,7 @@ function money(value: number) {
 
 .region-option-copy strong {
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -866,13 +965,13 @@ function money(value: number) {
 
 .all-store-icon,
 .all-region-icon {
-  background: #fff3e6;
-  color: #ff6a00;
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .region-option-icon {
   background: #f2f4f7;
-  color: #475467;
+  color: #475569;
 }
 
 :global(.order-app-select-dropdown .el-select-dropdown__list),

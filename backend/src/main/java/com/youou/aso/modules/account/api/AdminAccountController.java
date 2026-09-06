@@ -70,6 +70,24 @@ public class AdminAccountController {
     }
 
     @PreAuthorize("@perm.has('admin:manage')")
+    @GetMapping("/{id}/permissions")
+    public ApiResponse<List<Long>> getPermissions(@AuthenticationPrincipal AuthenticatedAccount account, @PathVariable Long id) {
+        ensureSuperAdmin(account);
+        return ApiResponse.ok(adminAccountService.getPermissions(id));
+    }
+
+    @PreAuthorize("@perm.has('admin:manage')")
+    @PutMapping("/{id}/permissions")
+    public ApiResponse<List<Long>> updatePermissions(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id,
+            @RequestBody UpdateAdminPermissionsRequest request
+    ) {
+        ensureSuperAdmin(account);
+        return ApiResponse.ok(adminAccountService.updatePermissions(id, request.menuIds()));
+    }
+
+    @PreAuthorize("@perm.has('admin:manage')")
     @PutMapping("/{id}/status")
     public ApiResponse<AdminAccountResult> updateStatus(
             @AuthenticationPrincipal AuthenticatedAccount account,
@@ -92,6 +110,9 @@ public class AdminAccountController {
     }
 
     public record UpdateAdminRolesRequest(List<Long> roleIds) {
+    }
+
+    public record UpdateAdminPermissionsRequest(List<Long> menuIds) {
     }
 
     public record CreateAdminRequest(

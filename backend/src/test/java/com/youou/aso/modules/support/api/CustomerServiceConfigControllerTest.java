@@ -39,6 +39,10 @@ class CustomerServiceConfigControllerTest {
                         "Support",
                         "https://static.example.test/qr.png",
                         "Scan to recharge",
+                        "support@example.test",
+                        null,
+                        null,
+                        null,
                         true
                 )
         ))
@@ -55,12 +59,18 @@ class CustomerServiceConfigControllerTest {
                         "Support",
                         "https://static.example.test/new-qr.png",
                         "Scan to recharge",
+                        "support@example.test",
+                        "https://teams.example.test/support",
+                        "https://t.me/example_support",
+                        "https://wa.me/12025550123",
                         true
                 )
         ).data();
 
         assertThat(result.serviceName()).isEqualTo("Support");
         assertThat(result.qrCodeUrl()).isEqualTo("https://static.example.test/new-qr.png");
+        assertThat(result.email()).isEqualTo("support@example.test");
+        assertThat(result.telegramUrl()).isEqualTo("https://t.me/example_support");
         assertThat(result.enabled()).isTrue();
     }
 
@@ -73,6 +83,7 @@ class CustomerServiceConfigControllerTest {
             config.setServiceName("Support");
             config.setQrCodeUrl("https://static.example.test/qr.png");
             config.setContactHint("Scan to recharge");
+            config.setEmail("support@example.test");
             config.setEnabled(true);
             config.setUpdatedAt(LocalDateTime.of(2026, 6, 22, 12, 0));
         }
@@ -89,6 +100,10 @@ class CustomerServiceConfigControllerTest {
             config.setServiceName(nextConfig.getServiceName());
             config.setQrCodeUrl(nextConfig.getQrCodeUrl());
             config.setContactHint(nextConfig.getContactHint());
+            config.setEmail(nextConfig.getEmail());
+            config.setTeamsUrl(nextConfig.getTeamsUrl());
+            config.setTelegramUrl(nextConfig.getTelegramUrl());
+            config.setWhatsappUrl(nextConfig.getWhatsappUrl());
             config.setEnabled(nextConfig.isEnabled());
             config.setUpdatedAt(LocalDateTime.of(2026, 6, 22, 12, 0));
             return config;

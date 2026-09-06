@@ -8,6 +8,7 @@ import com.youou.aso.modules.account.service.AuthenticatedAccount;
 import com.youou.aso.modules.pricing.domain.PriceCode;
 import com.youou.aso.modules.pricing.dto.PricingConfigResult;
 import com.youou.aso.modules.pricing.dto.UpdatePricingCommand;
+import com.youou.aso.modules.pricing.dto.OrderTypeRegionPricingResult;
 import com.youou.aso.modules.pricing.service.PricingService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -48,8 +49,25 @@ public class AdminPricingController {
     ) {
         requireAdmin(account);
         return ApiResponse.ok(pricingService.updatePricing(request.items().stream()
-                .map(item -> new UpdatePricingCommand(item.code(), item.unitPrice()))
+                .map(item -> new UpdatePricingCommand(item.code(), item.unitPrice(), item.chinaUnitPrice()))
                 .toList()));
+    }
+
+    @PreAuthorize("@perm.hasMenu('system.pricing')")
+    @GetMapping("/regions")
+    public ApiResponse<List<OrderTypeRegionPricingResult>> listRegionPricing(@AuthenticationPrincipal AuthenticatedAccount account) {
+        requireAdmin(account);
+        return ApiResponse.ok(pricingService.listOrderTypeRegionPricing());
+    }
+
+    @PreAuthorize("@perm.has('pricing:update')")
+    @PutMapping("/regions")
+    public ApiResponse<List<OrderTypeRegionPricingResult>> updateRegionPricing(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @RequestBody List<OrderTypeRegionPricingResult> configs
+    ) {
+        requireAdmin(account);
+        return ApiResponse.ok(pricingService.updateOrderTypeRegionPricing(configs));
     }
 
     private void requireAdmin(AuthenticatedAccount account) {
@@ -70,7 +88,11 @@ public class AdminPricingController {
 
             @NotNull
             @DecimalMin(value = "0.00")
-            BigDecimal unitPrice
+            BigDecimal unitPrice,
+
+            @NotNull
+            @DecimalMin(value = "0.00")
+            BigDecimal chinaUnitPrice
     ) {
     }
 }

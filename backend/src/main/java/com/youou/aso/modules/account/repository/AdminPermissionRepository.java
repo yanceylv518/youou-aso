@@ -31,4 +31,8 @@ public interface AdminPermissionRepository {
     List<String> findPermissionCodesByAdminId(Long adminId);
 
     void replaceAdminRoles(Long adminId, List<Long> roleIds);
+
+    List<Long> findMenuIdsByAdminId(Long adminId);
+
+    void replaceAdminMenus(Long adminId, List<Long> menuIds);
 }

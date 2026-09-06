@@ -61,6 +61,9 @@ public class WalletTransactionTypeConfigService {
         config.setTransactionType(type);
         config.setDisplayNameZh(command.displayNameZh().trim());
         config.setDisplayNameEn(command.displayNameEn().trim());
+        config.setDisplayNameRu(command.displayNameRu().trim());
+        config.setDisplayNamePt(command.displayNamePt().trim());
+        config.setDisplayNameEs(command.displayNameEs().trim());
         return config;
     }
 
@@ -68,10 +71,10 @@ public class WalletTransactionTypeConfigService {
         if (command == null || command.transactionType() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        if (isBlank(command.displayNameZh()) || isBlank(command.displayNameEn())) {
+        if (isBlank(command.displayNameZh()) || isBlank(command.displayNameEn()) || isBlank(command.displayNameRu()) || isBlank(command.displayNamePt()) || isBlank(command.displayNameEs())) {
             throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
         }
-        if (command.displayNameZh().trim().length() > MAX_ZH_LENGTH || command.displayNameEn().trim().length() > MAX_EN_LENGTH) {
+        if (command.displayNameZh().trim().length() > MAX_ZH_LENGTH || command.displayNameEn().trim().length() > MAX_EN_LENGTH || command.displayNameRu().trim().length() > MAX_EN_LENGTH || command.displayNamePt().trim().length() > MAX_EN_LENGTH || command.displayNameEs().trim().length() > MAX_EN_LENGTH) {
             throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
         }
     }

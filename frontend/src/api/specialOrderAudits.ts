@@ -31,10 +31,15 @@ export interface SpecialOrderAudit {
 }
 
 export interface SpecialOrderAuditItem {
+  id?: number
   regionCode: string
   keyword: string
+  chartType?: string | null
   targetRank: number | null
   coverageNote: string | null
+  unitPrice?: number | null
+  executionDays?: number | null
+  amount?: number | null
 }
 
 export interface SubmitSpecialAuditPayload {
@@ -50,6 +55,7 @@ export interface SubmitSpecialAuditPayload {
 export interface ReviewSpecialAuditPayload {
   negotiatedContent: string
   negotiatedPrice: number
+  itemPricing?: Array<{ itemId: number; unitPrice: number; executionDays: number }>
 }
 
 export async function getCustomerSpecialAudits() {
@@ -60,6 +66,21 @@ export async function getCustomerSpecialAudits() {
 export async function getCustomerSpecialAuditsPage(params: { page: number; pageSize: number }) {
   const response = await http.get<ApiResponse<PageResult<SpecialOrderAudit>>>('/customer/special-order-audits', { params })
   return response.data.data
+}
+
+export async function getCustomerSpecialAudit(id: number) {
+  try {
+    const response = await http.get<ApiResponse<SpecialOrderAudit>>(`/customer/special-order-audits/${id}`)
+    return response.data.data
+  } catch (error) {
+    // Keep the detail page usable while an older backend instance is still
+    // running during a rolling deployment. The list endpoint is also scoped
+    // to the current customer, so this fallback does not weaken ownership.
+    const audits = await getCustomerSpecialAudits()
+    const audit = audits.find((item) => item.id === id)
+    if (!audit) throw error
+    return audit
+  }
 }
 
 export async function submitSpecialAudit(payload: SubmitSpecialAuditPayload) {
@@ -80,6 +101,18 @@ export async function getAdminSpecialAudits() {
 export async function getAdminSpecialAuditsPage(params: { page: number; pageSize: number }) {
   const response = await http.get<ApiResponse<PageResult<SpecialOrderAudit>>>('/admin/special-order-audits', { params })
   return response.data.data
+}
+
+export async function getAdminSpecialAudit(id: number) {
+  try {
+    const response = await http.get<ApiResponse<SpecialOrderAudit>>(`/admin/special-order-audits/${id}`)
+    return response.data.data
+  } catch (error) {
+    const audits = await getAdminSpecialAudits()
+    const audit = audits.find((item) => item.id === id)
+    if (!audit) throw error
+    return audit
+  }
 }
 
 export async function reviewSpecialAudit(id: number, payload: ReviewSpecialAuditPayload) {

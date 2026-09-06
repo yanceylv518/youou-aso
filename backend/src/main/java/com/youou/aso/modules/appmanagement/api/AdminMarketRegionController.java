@@ -9,12 +9,7 @@ import com.youou.aso.modules.appmanagement.dto.AdminMarketRegionResult;
 import com.youou.aso.modules.appmanagement.service.AdminMarketRegionService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -35,20 +30,23 @@ public class AdminMarketRegionController {
     }
 
     @PreAuthorize("@perm.has('region:update')")
-    @PutMapping("/{code}")
-    public ApiResponse<AdminMarketRegionResult> update(
-            @AuthenticationPrincipal AuthenticatedAccount account,
-            @PathVariable String code,
-            @RequestBody UpdateMarketRegionRequest request
-    ) {
+    @PostMapping
+    public ApiResponse<AdminMarketRegionResult> create(@AuthenticationPrincipal AuthenticatedAccount account,
+            @RequestBody SaveMarketRegionRequest request) {
         ensureAdmin(account);
-        return ApiResponse.ok(adminMarketRegionService.updateRegion(
-                code,
-                request.enabled(),
-                request.supportsAppStore(),
-                request.supportsGooglePlay(),
-                request.supportsIpadStore()
-        ));
+        return ApiResponse.ok(adminMarketRegionService.createRegion(request.code(), request.nameZh(), request.nameEn(), request.nameRu(), request.namePt(), request.nameEs(),
+                request.enabled(), request.supportsAppStore(), request.supportsGooglePlay(),
+                request.supportsIpadStore(), request.sortOrder()));
+    }
+
+    @PreAuthorize("@perm.has('region:update')")
+    @PutMapping("/{code}")
+    public ApiResponse<AdminMarketRegionResult> update(@AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable String code, @RequestBody SaveMarketRegionRequest request) {
+        ensureAdmin(account);
+        return ApiResponse.ok(adminMarketRegionService.updateRegion(code, request.code(), request.nameZh(), request.nameEn(), request.nameRu(), request.namePt(), request.nameEs(),
+                request.enabled(), request.supportsAppStore(), request.supportsGooglePlay(),
+                request.supportsIpadStore(), request.sortOrder()));
     }
 
     private void ensureAdmin(AuthenticatedAccount account) {
@@ -57,11 +55,7 @@ public class AdminMarketRegionController {
         }
     }
 
-    public record UpdateMarketRegionRequest(
-            boolean enabled,
-            boolean supportsAppStore,
-            boolean supportsGooglePlay,
-            boolean supportsIpadStore
-    ) {
+    public record SaveMarketRegionRequest(String code, String nameZh, String nameEn, String nameRu, String namePt, String nameEs, boolean enabled,
+            boolean supportsAppStore, boolean supportsGooglePlay, boolean supportsIpadStore, int sortOrder) {
     }
 }

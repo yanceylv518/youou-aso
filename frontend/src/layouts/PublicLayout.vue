@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="public-layout">
     <header class="public-header">
       <router-link class="brand" to="/">
@@ -10,14 +10,12 @@
           <router-link to="/login">{{ t('public.nav.login') }}</router-link>
           <router-link to="/register">{{ t('public.nav.register') }}</router-link>
         </nav>
-        <div class="language-switch" :aria-label="t('common.language')">
-          <button type="button" :class="{ active: currentLocale === 'zh-CN' }" @click="setLocale('zh-CN')">
-            {{ t('common.chinese') }}
+        <el-dropdown trigger="click" @command="setLocale">
+          <button class="language-trigger" type="button" :aria-label="t('common.language')">
+            <span class="language-icon">◎</span>{{ currentLocaleOption?.nativeLabel }}<span class="language-chevron">⌄</span>
           </button>
-          <button type="button" :class="{ active: currentLocale === 'en-US' }" @click="setLocale('en-US')">
-            {{ t('common.english') }}
-          </button>
-        </div>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in localeOptions" :key="option.code" :command="option.code" :class="{ 'is-selected-locale': currentLocale === option.code }">{{ option.nativeLabel }}</el-dropdown-item></el-dropdown-menu></template>
+        </el-dropdown>
       </div>
     </header>
     <main>
@@ -30,16 +28,18 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
-import { LOCALE_STORAGE_KEY, type AppLocale } from '../i18n'
+import { LOCALE_STORAGE_KEY, localeHtmlLang, localeOptions, type AppLocale } from '../i18n'
+import { writeBrowserStorage } from '@/utils/browserStorage'
 
 const { locale, t } = useI18n()
 
 const currentLocale = computed(() => locale.value as AppLocale)
+const currentLocaleOption = computed(() => localeOptions.find(({ code }) => code === currentLocale.value))
 
 const setLocale = (nextLocale: AppLocale) => {
   locale.value = nextLocale
-  window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale)
-  document.documentElement.lang = nextLocale === 'zh-CN' ? 'zh-CN' : 'en'
+  writeBrowserStorage(LOCALE_STORAGE_KEY, nextLocale)
+  document.documentElement.lang = localeHtmlLang[nextLocale]
 }
 </script>
 
@@ -47,7 +47,7 @@ const setLocale = (nextLocale: AppLocale) => {
 .public-layout {
   min-height: 100vh;
   background: #f5f9ff;
-  color: #182230;
+  color: #0f172a;
 }
 
 .public-header {
@@ -96,7 +96,7 @@ main {
 }
 
 .public-nav a {
-  color: #344054;
+  color: #334155;
   font-size: 15px;
   font-weight: 700;
   text-decoration: none;
@@ -104,7 +104,7 @@ main {
 }
 
 .public-nav a.router-link-active {
-  color: #1b75d0;
+  color: #1d4ed8;
   font-weight: 700;
 }
 
@@ -114,34 +114,24 @@ main {
   gap: 18px;
 }
 
-.language-switch {
+.language-trigger {
   display: inline-flex;
-  padding: 4px;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
   border: 1px solid #dce6f4;
   border-radius: 999px;
   background: #ffffff;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 60%);
-}
-
-.language-switch button {
-  min-width: 70px;
-  height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #667085;
+  color: #334155;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
 }
-
-.language-switch button.active {
-  background: linear-gradient(135deg, #2f7df4, #246be0);
-  color: #ffffff;
-  box-shadow: 0 8px 18px rgb(47 125 244 / 22%);
-}
+.language-icon { color: #2563eb; font-size: 16px; }
+.language-chevron { color: #94a3b8; font-size: 14px; }
+:global(.is-selected-locale) { color: #2563eb; font-weight: 700; background: #eff6ff; }
 
 @media (max-width: 700px) {
   .public-header {
@@ -167,11 +157,7 @@ main {
     font-size: 13px;
   }
 
-  .language-switch button {
-    min-width: 52px;
-    padding: 0 7px;
-    font-size: 12px;
-  }
+  .language-trigger { height: 34px; padding: 0 11px; }
 }
 </style>
 

@@ -63,8 +63,18 @@ public class AdminSpecialOrderAuditController {
         return ApiResponse.ok(SpecialOrderAuditResult.from(specialOrderAuditService.reviewAudit(
                 id,
                 account.accountId(),
-                new ReviewSpecialAuditCommand(request.negotiatedContent(), request.negotiatedPrice())
+                new ReviewSpecialAuditCommand(request.negotiatedContent(), request.negotiatedPrice(), request.itemPricing())
         )));
+    }
+
+    @PreAuthorize("@perm.hasMenu('orders.pendingReview')")
+    @GetMapping("/{id}")
+    public ApiResponse<SpecialOrderAuditResult> detail(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id
+    ) {
+        ensureAdmin(account);
+        return ApiResponse.ok(SpecialOrderAuditResult.from(specialOrderAuditService.getAdminAudit(id)));
     }
 
     @PreAuthorize("@perm.has('specialOrder:cancel')")
@@ -102,8 +112,13 @@ public class AdminSpecialOrderAuditController {
             String negotiatedContent,
 
             @NotNull
-            BigDecimal negotiatedPrice
+            BigDecimal negotiatedPrice,
+
+            List<ReviewSpecialAuditCommand.ItemPricing> itemPricing
     ) {
+        public ReviewSpecialAuditRequest(String negotiatedContent, BigDecimal negotiatedPrice) {
+            this(negotiatedContent, negotiatedPrice, null);
+        }
     }
 
     public record CancelSpecialAuditRequest(

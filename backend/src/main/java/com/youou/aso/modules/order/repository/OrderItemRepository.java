@@ -10,5 +10,11 @@ public interface OrderItemRepository {
 
     void deleteByOrderId(Long orderId);
 
+    default void updateCompletedQuantities(List<OrderItem> items) {
+    }
+
+    default void updateQuantitiesAndProgress(List<OrderItem> items) {
+    }
+
     Map<Long, List<OrderItem>> findByOrderIds(List<Long> orderIds);
 }

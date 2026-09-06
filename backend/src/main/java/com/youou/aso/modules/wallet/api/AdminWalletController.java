@@ -132,7 +132,10 @@ public class AdminWalletController {
                 .map(item -> new UpdateWalletTransactionTypeConfigCommand(
                         item.transactionType(),
                         item.displayNameZh(),
-                        item.displayNameEn()
+                        item.displayNameEn(),
+                        item.displayNameRu(),
+                        item.displayNamePt(),
+                        item.displayNameEs()
                 ))
                 .toList()));
     }
@@ -189,6 +192,10 @@ public class AdminWalletController {
             @NotBlank
             @Size(max = 120)
             String displayNameEn
+            ,
+            @NotBlank @Size(max = 120) String displayNameRu,
+            @NotBlank @Size(max = 120) String displayNamePt,
+            @NotBlank @Size(max = 120) String displayNameEs
     ) {
     }
 }

@@ -39,8 +39,7 @@
         <div class="language-row">
           <span>{{ t('common.language') }}</span>
           <el-radio-group v-model="currentLocale" @change="setLocale">
-            <el-radio-button label="zh-CN">{{ t('common.chinese') }}</el-radio-button>
-            <el-radio-button label="en-US">{{ t('common.english') }}</el-radio-button>
+            <el-radio-button v-for="option in localeOptions" :key="option.code" :label="option.code">{{ option.nativeLabel }}</el-radio-button>
           </el-radio-group>
         </div>
         <p class="hint">{{ t('accountSettings.localeHint') }}</p>
@@ -62,7 +61,7 @@
       </section>
     </div>
 
-    <el-dialog
+    <el-dialog append-to-body
       v-model="passwordDialogVisible"
       :title="t('accountSettings.changePassword')"
       width="420px"
@@ -118,8 +117,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Lock, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import { changePassword } from '@/api/auth'
-import { LOCALE_STORAGE_KEY, type AppLocale } from '@/i18n'
+import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, localeHtmlLang, localeOptions, supportedLocales, type AppLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
+import { writeBrowserStorage } from '@/utils/browserStorage'
 
 const { locale, t } = useI18n()
 const router = useRouter()
@@ -153,12 +153,12 @@ const currentLocale = computed({
   set: (value: AppLocale) => setLocale(value)
 })
 function setLocale(nextLocale: AppLocale | string | number | boolean | undefined) {
-  const normalized = nextLocale === 'en-US' ? 'en-US' : 'zh-CN'
+  const normalized = supportedLocales.includes(nextLocale as AppLocale) ? nextLocale as AppLocale : DEFAULT_LOCALE
   locale.value = normalized
   auth.locale = normalized
   auth.persist()
-  window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized)
-  document.documentElement.lang = normalized === 'zh-CN' ? 'zh-CN' : 'en'
+  writeBrowserStorage(LOCALE_STORAGE_KEY, normalized)
+  document.documentElement.lang = localeHtmlLang[normalized]
 }
 
 function openPasswordDialog() {
@@ -214,7 +214,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 <style scoped>
 .settings-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 h2,
@@ -231,7 +231,7 @@ p {
 .panel {
   min-width: 0;
   padding: 18px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 14px 32px rgb(16 24 40 / 5%);
@@ -250,7 +250,7 @@ p {
   display: inline-grid;
   place-items: center;
   border-radius: 50%;
-  background: #ffedcf;
+  background: #fffbeb;
   color: #d65d00;
   font-size: 22px;
   font-weight: 800;
@@ -264,7 +264,7 @@ p {
 
 .profile-panel p {
   margin: 5px 0 0;
-  color: #667085;
+  color: #64748b;
 }
 
 .panel-header {
@@ -295,12 +295,12 @@ p {
 }
 
 .info-list dt {
-  color: #667085;
+  color: #64748b;
 }
 
 .info-list dd {
   margin: 0;
-  color: #182230;
+  color: #0f172a;
   font-weight: 700;
   text-align: right;
   overflow-wrap: anywhere;
@@ -315,7 +315,7 @@ p {
 
 .hint {
   margin: 12px 0 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.6;
 }
 

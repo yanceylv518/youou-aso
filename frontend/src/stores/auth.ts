@@ -8,6 +8,8 @@ import {
   type LoginResult,
   type RegisterPayload
 } from '@/api/auth'
+import { isAxiosError } from 'axios'
+import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/utils/browserStorage'
 
 export type AccountType = 'CUSTOMER' | 'ADMIN'
 export type AdminRole = 'ADMIN' | 'SUPER_ADMIN'
@@ -53,7 +55,7 @@ export const useAuthStore = defineStore('auth', {
     accountType: '' as AccountType | '',
     roleCode: '' as AdminRole | '',
     forcePasswordChange: false,
-    locale: 'zh-CN',
+    locale: 'en-US',
     roleKeys: [] as string[],
     menuCodes: [] as string[],
     permissions: [] as string[],
@@ -73,7 +75,7 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     restore() {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY)
+      const stored = readBrowserStorage(AUTH_STORAGE_KEY)
       if (!stored) {
         return
       }
@@ -86,16 +88,16 @@ export const useAuthStore = defineStore('auth', {
         this.accountType = session.accountType || ''
         this.roleCode = session.roleCode || ''
         this.forcePasswordChange = Boolean(session.forcePasswordChange)
-        this.locale = session.locale || 'zh-CN'
+        this.locale = session.locale || 'en-US'
         this.roleKeys = Array.isArray(session.roleKeys) ? session.roleKeys : []
         this.menuCodes = Array.isArray(session.menuCodes) ? session.menuCodes : []
         this.permissions = Array.isArray(session.permissions) ? session.permissions : []
       } catch {
-        localStorage.removeItem(AUTH_STORAGE_KEY)
+        removeBrowserStorage(AUTH_STORAGE_KEY)
       }
     },
     persist() {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(toStoredSession(this)))
+      writeBrowserStorage(AUTH_STORAGE_KEY, JSON.stringify(toStoredSession(this)))
     },
     applyLoginResult(result: LoginResult) {
       this.token = result.token
@@ -133,8 +135,10 @@ export const useAuthStore = defineStore('auth', {
       try {
         const account = await getCurrentAccount()
         this.applyCurrentAccount(account)
-      } catch {
-        this.logout()
+      } catch (error) {
+        if (isAuthenticationFailure(error)) {
+          this.logout()
+        }
       } finally {
         this.bootstrapped = true
       }
@@ -158,7 +162,14 @@ export const useAuthStore = defineStore('auth', {
       this.roleKeys = []
       this.menuCodes = []
       this.permissions = []
-      localStorage.removeItem(AUTH_STORAGE_KEY)
+      removeBrowserStorage(AUTH_STORAGE_KEY)
     }
   }
 })
+
+function isAuthenticationFailure(error: unknown) {
+  if (!isAxiosError(error)) return false
+  const status = error.response?.status
+  const data = error.response?.data as { code?: string } | undefined
+  return status === 401 || (status === 403 && !data?.code)
+}

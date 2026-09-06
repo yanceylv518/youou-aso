@@ -12,11 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.LocalDateTime;
+import java.util.regex.Pattern;
 
 @Service
 public class CustomerServiceConfigService {
     private static final String DEFAULT_SERVICE_NAME = "Youou-ASO Support";
     private static final String DEFAULT_CONTACT_HINT = "Scan the QR code to contact customer service for recharge.";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final CustomerServiceConfigRepository repository;
 
@@ -31,6 +33,17 @@ public class CustomerServiceConfigService {
                         DEFAULT_SERVICE_NAME,
                         null,
                         DEFAULT_CONTACT_HINT,
+                        null,
+                        false,
+                        null,
+                        false,
+                        null,
+                        null,
+                        null,
+                        false,
+                        null,
+                        false,
+                        null,
                         false,
                         null
                 ));
@@ -41,7 +54,17 @@ public class CustomerServiceConfigService {
         String serviceName = normalizeText(command.serviceName(), DEFAULT_SERVICE_NAME, 120);
         String qrCodeUrl = normalizeOptionalUrl(command.qrCodeUrl());
         String contactHint = normalizeText(command.contactHint(), DEFAULT_CONTACT_HINT, 512);
-        if (command.enabled() && qrCodeUrl == null) {
+        String email = normalizeOptionalEmail(command.email());
+        String phone = normalizeOptionalText(command.phone(), 40);
+        String teamsUrl = normalizeOptionalUrl(command.teamsUrl());
+        String telegramUrl = normalizeOptionalUrl(command.telegramUrl());
+        String telegramQrUrl = normalizeOptionalUrl(command.telegramQrUrl());
+        String wechatQrUrl = normalizeOptionalUrl(command.wechatQrUrl());
+        String whatsappUrl = normalizeOptionalUrl(command.whatsappUrl());
+        if ((command.emailVisible() && email == null)
+                || (command.phoneVisible() && phone == null)
+                || (command.telegramQrVisible() && telegramQrUrl == null)
+                || (command.wechatQrVisible() && wechatQrUrl == null)) {
             throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
         }
 
@@ -49,6 +72,17 @@ public class CustomerServiceConfigService {
         config.setServiceName(serviceName);
         config.setQrCodeUrl(qrCodeUrl);
         config.setContactHint(contactHint);
+        config.setEmail(email);
+        config.setEmailVisible(command.emailVisible());
+        config.setPhone(phone);
+        config.setPhoneVisible(command.phoneVisible());
+        config.setTeamsUrl(teamsUrl);
+        config.setTelegramUrl(telegramUrl);
+        config.setTelegramQrUrl(telegramQrUrl);
+        config.setTelegramQrVisible(command.telegramQrVisible());
+        config.setWechatQrUrl(wechatQrUrl);
+        config.setWechatQrVisible(command.wechatQrVisible());
+        config.setWhatsappUrl(whatsappUrl);
         config.setEnabled(command.enabled());
         return toResult(repository.save(config));
     }
@@ -58,6 +92,17 @@ public class CustomerServiceConfigService {
                 config.getServiceName(),
                 config.getQrCodeUrl(),
                 config.getContactHint(),
+                config.getEmail(),
+                config.isEmailVisible(),
+                config.getPhone(),
+                config.isPhoneVisible(),
+                config.getTeamsUrl(),
+                config.getTelegramUrl(),
+                config.getTelegramQrUrl(),
+                config.isTelegramQrVisible(),
+                config.getWechatQrUrl(),
+                config.isWechatQrVisible(),
+                config.getWhatsappUrl(),
                 config.isEnabled(),
                 formatDateTime(config.getUpdatedAt())
         );
@@ -83,6 +128,9 @@ public class CustomerServiceConfigService {
         if (normalized.length() > 1024) {
             throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
         }
+        if (normalized.startsWith("/uploads/app-icons/") && !normalized.contains("..")) {
+            return normalized;
+        }
         try {
             URI uri = new URI(normalized);
             String scheme = uri.getScheme();
@@ -93,5 +141,27 @@ public class CustomerServiceConfigService {
         } catch (URISyntaxException exception) {
             throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
         }
+    }
+
+    private String normalizeOptionalEmail(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 254 || !EMAIL_PATTERN.matcher(normalized).matches()) {
+            throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalText(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > maxLength) {
+            throw new BusinessException(ErrorCode.CONFIG_VALUE_INVALID);
+        }
+        return normalized;
     }
 }

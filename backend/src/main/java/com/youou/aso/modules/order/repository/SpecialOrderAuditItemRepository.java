@@ -9,4 +9,6 @@ public interface SpecialOrderAuditItemRepository {
     void saveAll(Long auditId, List<SpecialOrderAuditItem> items);
 
     Map<Long, List<SpecialOrderAuditItem>> findByAuditIds(List<Long> auditIds);
+
+    void updatePricing(Long id, java.math.BigDecimal unitPrice, Integer executionDays);
 }

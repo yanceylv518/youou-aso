@@ -5,6 +5,9 @@ public class MarketRegion {
     private String code;
     private String nameZh;
     private String nameEn;
+    private String nameRu;
+    private String namePt;
+    private String nameEs;
     private boolean enabled;
     private boolean supportsAppStore = true;
     private boolean supportsGooglePlay = true;
@@ -42,6 +45,9 @@ public class MarketRegion {
     public void setNameEn(String nameEn) {
         this.nameEn = nameEn;
     }
+    public String getNameRu(){return nameRu;} public void setNameRu(String value){nameRu=value;}
+    public String getNamePt(){return namePt;} public void setNamePt(String value){namePt=value;}
+    public String getNameEs(){return nameEs;} public void setNameEs(String value){nameEs=value;}
 
     public boolean isEnabled() {
         return enabled;

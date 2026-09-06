@@ -4,6 +4,9 @@ export interface AdminMarketRegion {
   code: string
   nameZh: string
   nameEn: string
+  nameRu: string
+  namePt: string
+  nameEs: string
   enabled: boolean
   supportsAppStore: boolean
   supportsGooglePlay: boolean
@@ -11,11 +14,18 @@ export interface AdminMarketRegion {
   sortOrder: number
 }
 
-export interface UpdateMarketRegionPayload {
+export interface SaveMarketRegionPayload {
+  code?: string
+  nameZh: string
+  nameEn: string
+  nameRu: string
+  namePt: string
+  nameEs: string
   enabled: boolean
   supportsAppStore: boolean
   supportsGooglePlay: boolean
   supportsIpadStore: boolean
+  sortOrder: number
 }
 
 export async function getAdminRegions() {
@@ -23,7 +33,12 @@ export async function getAdminRegions() {
   return response.data.data
 }
 
-export async function updateAdminRegion(code: string, payload: UpdateMarketRegionPayload) {
+export async function createAdminRegion(payload: SaveMarketRegionPayload) {
+  const response = await http.post<ApiResponse<AdminMarketRegion>>('/admin/regions', payload)
+  return response.data.data
+}
+
+export async function updateAdminRegion(code: string, payload: SaveMarketRegionPayload) {
   const response = await http.put<ApiResponse<AdminMarketRegion>>(`/admin/regions/${code}`, payload)
   return response.data.data
 }

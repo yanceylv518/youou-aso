@@ -1,6 +1,6 @@
-﻿<template>
+<template>
   <el-container class="app-shell">
-    <el-aside width="240px" class="sidebar">
+    <el-aside width="240px" class="sidebar" :class="{ 'is-mobile-open': mobileMenuOpen }">
       <router-link class="shell-brand" to="/admin/dashboard">
         <img class="brand-mark" :src="systemLogo" alt="" />
         <span>{{ $t('app.name') }}</span>
@@ -22,28 +22,10 @@
           <el-icon><Grid /></el-icon>
           <span>{{ $t('menu.applications') }}</span>
         </el-menu-item>
-        <el-sub-menu v-if="canAnyMenu(['orderExecution.pending', 'orderExecution.executing', 'orderExecution.completed'])" index="/admin/order-execution">
+        <el-sub-menu v-if="canAnyMenu(['orders.pendingReview', 'orders.pendingConfirm', 'orderExecution.pending', 'orderExecution.executing', 'orderExecution.completed'])" index="/admin/order-execution">
           <template #title>
             <el-icon><Finished /></el-icon>
             <span>{{ $t('menu.orderExecution') }}</span>
-          </template>
-          <el-menu-item v-if="auth.hasMenu('orderExecution.pending')" index="/admin/orders/pending-execution">
-            <el-icon><Tickets /></el-icon>
-            <span>{{ $t('menu.pendingExecutionOrders') }}</span>
-          </el-menu-item>
-          <el-menu-item v-if="auth.hasMenu('orderExecution.executing')" index="/admin/orders/executing">
-            <el-icon><Finished /></el-icon>
-            <span>{{ $t('menu.executingOrders') }}</span>
-          </el-menu-item>
-          <el-menu-item v-if="auth.hasMenu('orderExecution.completed')" index="/admin/orders/completed">
-            <el-icon><DocumentChecked /></el-icon>
-            <span>{{ $t('menu.completedOrders') }}</span>
-          </el-menu-item>
-        </el-sub-menu>
-        <el-sub-menu v-if="canAnyMenu(['orders.pendingReview', 'orders.pendingConfirm', 'orders.apple', 'orders.google', 'orders.ipad'])" index="/admin/orders">
-          <template #title>
-            <el-icon><Tickets /></el-icon>
-            <span>{{ $t('menu.orders') }}</span>
           </template>
           <el-menu-item v-if="auth.hasMenu('orders.pendingReview')" index="/admin/pending-review-orders">
             <el-icon><DocumentChecked /></el-icon>
@@ -53,6 +35,28 @@
             <el-icon><DocumentChecked /></el-icon>
             <span>{{ $t('menu.pendingConfirmOrders') }}</span>
           </el-menu-item>
+          <el-menu-item v-if="auth.hasMenu('orderExecution.pending')" index="/admin/orders/pending-execution">
+            <el-icon><Tickets /></el-icon>
+            <span>{{ $t('menu.pendingExecutionOrders') }}</span>
+          </el-menu-item>
+          <el-menu-item v-if="auth.hasMenu('orderExecution.executing')" index="/admin/orders/executing">
+            <el-icon><Finished /></el-icon>
+            <span>{{ $t('menu.executingOrders') }}</span>
+          </el-menu-item>
+          <el-menu-item v-if="auth.hasMenu('orderExecution.executing')" index="/admin/orders/paused">
+            <el-icon><Finished /></el-icon>
+            <span>{{ $t('menu.pausedOrders') }}</span>
+          </el-menu-item>
+          <el-menu-item v-if="auth.hasMenu('orderExecution.completed')" index="/admin/orders/completed">
+            <el-icon><DocumentChecked /></el-icon>
+            <span>{{ $t('menu.completedOrders') }}</span>
+          </el-menu-item>
+        </el-sub-menu>
+        <el-sub-menu v-if="canAnyMenu(['orders.apple', 'orders.google', 'orders.ipad'])" index="/admin/orders">
+          <template #title>
+            <el-icon><Tickets /></el-icon>
+            <span>{{ $t('menu.orders') }}</span>
+          </template>
           <el-menu-item v-if="auth.hasMenu('orders.apple')" index="/admin/orders/apple">
             <el-icon><Apple /></el-icon>
             <span>{{ $t('menu.appleOrders') }}</span>
@@ -80,11 +84,15 @@
             <span>{{ $t('menu.rechargeRecords') }}</span>
           </el-menu-item>
         </el-sub-menu>
-        <el-sub-menu v-if="canAnyMenu(['system.pricing', 'system.walletTypes', 'system.customerService', 'system.mail', 'system.regions', 'system.adminAccounts', 'system.settings'])" index="/admin/system">
+        <el-sub-menu v-if="canAnyMenu(['system.homeMetrics', 'system.pricing', 'system.walletTypes', 'system.customerService', 'system.mail', 'system.regions', 'system.adminAccounts', 'system.settings'])" index="/admin/system">
           <template #title>
             <el-icon><Tools /></el-icon>
             <span>{{ $t('menu.systemManagement') }}</span>
           </template>
+          <el-menu-item v-if="auth.hasMenu('system.homeMetrics')" index="/admin/home-metrics">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>{{ $t('menu.homeMetricsConfig') }}</span>
+          </el-menu-item>
           <el-menu-item v-if="auth.hasMenu('system.pricing')" index="/admin/pricing">
             <el-icon><PriceTag /></el-icon>
             <span>{{ $t('menu.pricing') }}</span>
@@ -119,6 +127,9 @@
     <el-container>
       <el-header class="topbar">
         <div class="topbar-title">
+          <button class="mobile-menu-trigger" type="button" @click="mobileMenuOpen = !mobileMenuOpen">
+            <el-icon><Menu /></el-icon>
+          </button>
           <h1 class="page-heading" :class="{ 'is-nested': pageTitle.parent }">
             <template v-if="pageTitle.parent">
               <span class="heading-parent">{{ pageTitle.parent }}</span>
@@ -136,13 +147,9 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="zh-CN">
-                  <el-icon class="language-check" :class="{ visible: currentLocale === 'zh-CN' }"><Check /></el-icon>
-                  <span>{{ t('common.chinese') }}</span>
-                </el-dropdown-item>
-                <el-dropdown-item command="en-US">
-                  <el-icon class="language-check" :class="{ visible: currentLocale === 'en-US' }"><Check /></el-icon>
-                  <span>{{ t('common.english') }}</span>
+                <el-dropdown-item v-for="option in localeOptions" :key="option.code" :command="option.code">
+                  <el-icon class="language-check" :class="{ visible: currentLocale === option.code }"><Check /></el-icon>
+                  <span>{{ option.nativeLabel }}</span>
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -182,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
 import { useRoute, useRouter } from 'vue-router'
@@ -193,6 +200,7 @@ import {
   Check,
   ChromeFilled,
   Connection,
+  DataAnalysis,
   DocumentChecked,
   Finished,
   Grid,
@@ -201,6 +209,7 @@ import {
   Message,
   Money,
   Monitor,
+  Menu,
   Notebook,
   PriceTag,
   Promotion,
@@ -211,17 +220,19 @@ import {
   Tools,
   User
 } from '@element-plus/icons-vue'
-import { LOCALE_STORAGE_KEY, type AppLocale } from '@/i18n'
+import { LOCALE_STORAGE_KEY, localeHtmlLang, localeOptions, supportedLocales, type AppLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
+import { writeBrowserStorage } from '@/utils/browserStorage'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const { locale, t } = useI18n()
+const mobileMenuOpen = ref(false)
 
 const currentLocale = computed(() => locale.value as AppLocale)
 const currentLanguageLabel = computed(() => {
-  return currentLocale.value === 'en-US' ? t('common.english') : t('common.chinese')
+  return localeOptions.find(({ code }) => code === currentLocale.value)?.nativeLabel || currentLocale.value
 })
 const activeMenu = computed(() => {
   const menu = route.meta.activeMenu
@@ -239,11 +250,15 @@ const pageTitle = computed(() => {
 const displayName = computed(() => auth.username || auth.email || t('account.unknown'))
 const accountInitial = computed(() => displayName.value.trim().slice(0, 1).toUpperCase() || 'Y')
 
+
+watch(() => route.fullPath, () => { mobileMenuOpen.value = false })
+
 function setLocale(nextLocale: AppLocale | string | number | object) {
-  if (nextLocale !== 'zh-CN' && nextLocale !== 'en-US') return
-  locale.value = nextLocale
-  window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale)
-  document.documentElement.lang = nextLocale === 'zh-CN' ? 'zh-CN' : 'en'
+  if (!supportedLocales.includes(nextLocale as AppLocale)) return
+  const normalized = nextLocale as AppLocale
+  locale.value = normalized
+  writeBrowserStorage(LOCALE_STORAGE_KEY, normalized)
+  document.documentElement.lang = localeHtmlLang[normalized]
 }
 
 function canAnyMenu(codes: string[]) {
@@ -275,7 +290,7 @@ async function logout() {
 
 .sidebar {
   background: #ffffff;
-  border-right: 1px solid #e6eaf0;
+  border-right: 1px solid #e2e8f0;
 }
 
 .shell-brand {
@@ -285,7 +300,7 @@ async function logout() {
   gap: 10px;
   padding: 0 20px;
   font-weight: 700;
-  color: #182230;
+  color: #0f172a;
   text-decoration: none;
   cursor: pointer;
 }
@@ -309,8 +324,8 @@ async function logout() {
   gap: 16px;
   justify-content: space-between;
   background: #ffffff;
-  border-bottom: 1px solid #e6eaf0;
-  color: #475467;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
 }
 
 .topbar-title {
@@ -324,7 +339,7 @@ async function logout() {
   gap: 8px;
   margin: 0;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
@@ -339,7 +354,7 @@ async function logout() {
 .heading-parent {
   min-width: 0;
   overflow: hidden;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
   text-overflow: ellipsis;
 }
@@ -352,7 +367,7 @@ async function logout() {
 .heading-current {
   min-width: 0;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-weight: 800;
   text-overflow: ellipsis;
 }
@@ -371,10 +386,10 @@ async function logout() {
   justify-content: center;
   gap: 8px;
   padding: 0 12px;
-  border: 1px solid #d8dee8;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #344054;
+  color: #334155;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -388,7 +403,7 @@ async function logout() {
 
 .language-check {
   opacity: 0;
-  color: #1b75d0;
+  color: #1d4ed8;
 }
 
 .language-check.visible {
@@ -401,10 +416,10 @@ async function logout() {
   align-items: center;
   gap: 10px;
   padding: 0 10px 0 6px;
-  border: 1px solid #d8dee8;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #344054;
+  color: #334155;
   cursor: pointer;
 }
 
@@ -415,8 +430,8 @@ async function logout() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #ffb11b;
-  color: #d9361f;
+  background: #fbbf24;
+  color: #92400e;
   font-weight: 800;
 }
 
@@ -428,7 +443,7 @@ async function logout() {
 }
 
 .account-name {
-  color: #344054;
+  color: #334155;
   font-weight: 700;
 }
 
@@ -438,11 +453,11 @@ async function logout() {
   flex-direction: column;
   gap: 4px;
   padding: 10px 14px;
-  color: #182230;
+  color: #0f172a;
 }
 
 .account-summary span {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -450,10 +465,24 @@ async function logout() {
   padding: 24px;
 }
 
+
+.mobile-menu-trigger { display: none; width: 38px; height: 38px; align-items: center; justify-content: center; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; color: #334155; cursor: pointer; }
+
 @media (max-width: 700px) {
   .sidebar {
-    display: none;
+    position: fixed;
+    z-index: 200;
+    display: block;
+    height: 100vh;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
   }
+
+  .sidebar.is-mobile-open { transform: translateX(0); box-shadow: 20px 0 50px rgb(15 23 42 / 20%); }
+
+  .mobile-menu-trigger { display: inline-flex; }
+
+  .topbar-title { display: flex; align-items: center; gap: 10px; }
 
   .topbar {
     height: auto;

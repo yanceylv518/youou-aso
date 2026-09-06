@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="auth-page">
     <el-form class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
       <div class="auth-brand">
@@ -37,6 +37,7 @@ import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/utils/browserStorage'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -53,13 +54,13 @@ const form = reactive({
 
 onMounted(() => {
   try {
-    const stored = localStorage.getItem(REMEMBER_LOGIN_KEY)
+    const stored = readBrowserStorage(REMEMBER_LOGIN_KEY)
     if (!stored) return
     const session = JSON.parse(stored) as { account?: string; rememberAccount?: boolean; rememberPassword?: boolean }
     rememberAccount.value = Boolean(session.rememberAccount ?? session.rememberPassword)
     form.account = session.account || ''
   } catch {
-    localStorage.removeItem(REMEMBER_LOGIN_KEY)
+    removeBrowserStorage(REMEMBER_LOGIN_KEY)
   }
 })
 
@@ -98,10 +99,10 @@ async function submit() {
 
 function persistRememberPreference() {
   if (!rememberAccount.value) {
-    localStorage.removeItem(REMEMBER_LOGIN_KEY)
+    removeBrowserStorage(REMEMBER_LOGIN_KEY)
     return
   }
-  localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({
+  writeBrowserStorage(REMEMBER_LOGIN_KEY, JSON.stringify({
     account: form.account.trim(),
     rememberAccount: true
   }))
@@ -142,7 +143,7 @@ function isProtectedRedirect(redirect: string) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #182230;
+  color: #0f172a;
   font-weight: 800;
 }
 
@@ -166,29 +167,29 @@ p {
 
 h1 {
   margin: 0;
-  color: #182230;
+  color: #0f172a;
   font-size: 28px;
   line-height: 1.2;
 }
 
 .auth-header p {
   margin: 8px 0 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.65;
 }
 
 :deep(.el-form-item__label) {
-  color: #344054;
+  color: #334155;
   font-weight: 700;
 }
 
 :deep(.el-input__wrapper) {
   border-radius: 8px;
-  box-shadow: 0 0 0 1px #d8dee8 inset;
+  box-shadow: 0 0 0 1px #cbd5e1 inset;
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #1b75d0 inset, 0 0 0 3px rgb(27 117 208 / 12%);
+  box-shadow: 0 0 0 1px #1d4ed8 inset, 0 0 0 3px rgb(27 117 208 / 12%);
 }
 
 .form-meta {
@@ -201,13 +202,13 @@ h1 {
 
 .form-meta :deep(.el-checkbox) {
   height: auto;
-  color: #475467;
+  color: #475569;
   font-weight: 700;
 }
 
 .form-meta a,
 .auth-switch a {
-  color: #1b75d0;
+  color: #1d4ed8;
   font-weight: 700;
   text-decoration: none;
 }
@@ -232,7 +233,7 @@ h1 {
   justify-content: center;
   gap: 8px;
   margin: 20px 0 0;
-  color: #667085;
+  color: #64748b;
 }
 
 @media (max-width: 520px) {

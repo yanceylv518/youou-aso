@@ -19,23 +19,13 @@
             <code>{{ row.transactionType }}</code>
           </template>
         </el-table-column>
-        <el-table-column :label="t('walletTypeConfig.displayNameZh')" min-width="220">
+        <el-table-column v-for="field in localeFields" :key="field.key" :label="field.label" min-width="220">
           <template #default="{ row }">
             <el-input
-              v-model.trim="row.displayNameZh"
-              maxlength="80"
-              show-word-limit
-              :placeholder="t('walletTypeConfig.displayNameZhPlaceholder')"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('walletTypeConfig.displayNameEn')" min-width="260">
-          <template #default="{ row }">
-            <el-input
-              v-model.trim="row.displayNameEn"
+              v-model.trim="row[field.key]"
               maxlength="120"
               show-word-limit
-              :placeholder="t('walletTypeConfig.displayNameEnPlaceholder')"
+              :placeholder="t('walletTypeConfig.localePlaceholder', { language: field.label })"
             />
           </template>
         </el-table-column>
@@ -53,6 +43,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { localeOptions } from '@/i18n'
 import {
   getAdminWalletTransactionTypeConfigs,
   updateAdminWalletTransactionTypeConfigs,
@@ -63,6 +54,8 @@ const { t } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
 const formItems = ref<WalletTransactionTypeConfig[]>([])
+const fieldByLocale = { 'zh-CN':'displayNameZh', 'en-US':'displayNameEn', 'ru-RU':'displayNameRu', 'pt-PT':'displayNamePt', 'es-ES':'displayNameEs' } as const
+const localeFields = localeOptions.map((option) => ({ key: fieldByLocale[option.code], label: option.nativeLabel }))
 
 onMounted(() => {
   loadConfigs()
@@ -80,7 +73,7 @@ async function loadConfigs() {
 }
 
 async function saveConfigs() {
-  if (formItems.value.some((item) => !item.displayNameZh.trim() || !item.displayNameEn.trim())) {
+  if (formItems.value.some((item) => localeFields.some((field) => !item[field.key].trim()))) {
     ElMessage.warning(t('walletTypeConfig.required'))
     return
   }
@@ -90,7 +83,10 @@ async function saveConfigs() {
       items: formItems.value.map((item) => ({
         transactionType: item.transactionType,
         displayNameZh: item.displayNameZh.trim(),
-        displayNameEn: item.displayNameEn.trim()
+        displayNameEn: item.displayNameEn.trim(),
+        displayNameRu: item.displayNameRu.trim(),
+        displayNamePt: item.displayNamePt.trim(),
+        displayNameEs: item.displayNameEs.trim()
       }))
     })
     ElMessage.success(t('walletTypeConfig.saved'))
@@ -108,7 +104,7 @@ function formatDate(value: string | null | undefined) {
 
 <style scoped>
 .wallet-type-config-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .toolbar {
@@ -129,13 +125,13 @@ function formatDate(value: string | null | undefined) {
 .page-note {
   max-width: 760px;
   margin: 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.6;
 }
 
 .config-card {
   overflow: hidden;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 14px 32px rgb(16 24 40 / 5%);
@@ -151,12 +147,12 @@ function formatDate(value: string | null | undefined) {
 
 .config-table :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
 }
 
 code {
-  color: #344054;
+  color: #334155;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
 }

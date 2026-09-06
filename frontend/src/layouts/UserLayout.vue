@@ -1,6 +1,6 @@
-﻿<template>
+<template>
   <el-container class="app-shell">
-    <el-aside width="232px" class="sidebar">
+    <el-aside width="232px" class="sidebar" :class="{ 'is-mobile-open': mobileMenuOpen }">
       <router-link class="shell-brand" to="/user/dashboard">
         <img class="brand-mark" :src="systemLogo" alt="" />
         <span>{{ $t('app.name') }}</span>
@@ -49,10 +49,47 @@
           <span>{{ $t('menu.settings') }}</span>
         </el-menu-item>
       </el-menu>
+      <section
+        class="sidebar-support"
+      >
+        <span class="sidebar-support-heading">
+          <span class="sidebar-support-icon">
+            <el-icon><Service /></el-icon>
+            <span class="sidebar-support-status" aria-hidden="true"></span>
+          </span>
+        </span>
+        <strong class="sidebar-support-title">{{ t('wallet.customerService') }}</strong>
+        <span class="sidebar-support-name">{{ customerServiceName || t('supportConfig.defaultServiceName') }}</span>
+        <span v-if="!customerServiceChannels.length" class="sidebar-support-hint">{{ t('wallet.customerServiceEntryHint') }}</span>
+        <div v-if="customerServiceChannels.length" class="sidebar-support-channels">
+          <button
+            v-for="channel in customerServiceChannels"
+            :key="channel.type"
+            type="button"
+            :class="[`channel-${channel.type}`, { active: selectedCustomerServiceChannel === channel.type }]"
+            :title="channel.name"
+            :aria-label="channel.name"
+            @click="selectedCustomerServiceChannel = channel.type"
+          >
+            <el-icon v-if="channel.type === 'email'"><Message /></el-icon>
+            <el-icon v-else-if="channel.type === 'phone'"><Phone /></el-icon>
+            <el-icon v-else-if="channel.type === 'telegram'"><Promotion /></el-icon>
+            <el-icon v-else><ChatDotRound /></el-icon>
+          </button>
+        </div>
+        <div v-if="activeCustomerServiceChannel" class="sidebar-support-contact">
+          <span>{{ activeCustomerServiceChannel.name }}</span>
+          <img v-if="activeCustomerServiceChannel.kind === 'qr'" :src="activeCustomerServiceChannel.value" :alt="activeCustomerServiceChannel.name" />
+          <strong v-else :title="activeCustomerServiceChannel.value">{{ activeCustomerServiceChannel.displayValue }}</strong>
+        </div>
+      </section>
     </el-aside>
     <el-container>
       <el-header class="topbar">
         <div class="topbar-title">
+          <button class="mobile-menu-trigger" type="button" @click="mobileMenuOpen = !mobileMenuOpen">
+            <el-icon><Menu /></el-icon>
+          </button>
           <h1 class="page-heading" :class="{ 'is-nested': pageTitle.parent }">
             <template v-if="pageTitle.parent">
               <span class="heading-parent">{{ pageTitle.parent }}</span>
@@ -81,13 +118,9 @@
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="zh-CN">
-                  <el-icon class="language-check" :class="{ visible: currentLocale === 'zh-CN' }"><Check /></el-icon>
-                  <span>{{ t('common.chinese') }}</span>
-                </el-dropdown-item>
-                <el-dropdown-item command="en-US">
-                  <el-icon class="language-check" :class="{ visible: currentLocale === 'en-US' }"><Check /></el-icon>
-                  <span>{{ t('common.english') }}</span>
+                <el-dropdown-item v-for="option in localeOptions" :key="option.code" :command="option.code">
+                  <el-icon class="language-check" :class="{ visible: currentLocale === option.code }"><Check /></el-icon>
+                  <span>{{ option.nativeLabel }}</span>
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -125,28 +158,70 @@
     </el-container>
   </el-container>
 
-  <el-dialog v-model="rechargeDialogVisible" :title="t('wallet.recharge')" width="360px" class="recharge-dialog">
+  <el-dialog append-to-body v-model="rechargeDialogVisible" :title="t('wallet.recharge')" width="360px" class="recharge-dialog">
     <div class="recharge-qr-panel">
       <div v-if="customerServiceQrUrl" class="qr-image-wrap">
         <img :src="customerServiceQrUrl" :alt="t('wallet.customerServiceQr')" />
       </div>
-      <div v-else class="qr-placeholder">
+      <div v-else-if="!customerServiceChannels.length" class="qr-placeholder">
         <span>{{ t('wallet.qrNotConfigured') }}</span>
       </div>
       <strong v-if="customerServiceName" class="customer-service-name">{{ customerServiceName }}</strong>
-      <p>{{ customerServiceHint || t('wallet.scanCustomerServiceQr') }}</p>
+      <p>{{ customerServiceQrUrl ? (customerServiceHint || t('wallet.scanCustomerServiceQr')) : t('wallet.customerServiceEntryHint') }}</p>
+      <div v-if="customerServiceChannels.length" class="dialog-support-tab-panel">
+        <div class="dialog-support-tabs" role="tablist">
+          <button
+            v-for="channel in customerServiceChannels"
+            :key="channel.type"
+            type="button"
+            role="tab"
+            :class="{ active: selectedCustomerServiceChannel === channel.type }"
+            :aria-selected="selectedCustomerServiceChannel === channel.type"
+            :title="channel.name"
+            @click="selectedCustomerServiceChannel = channel.type"
+          >
+            <el-icon v-if="channel.type === 'email'"><Message /></el-icon>
+            <el-icon v-else-if="channel.type === 'phone'"><Phone /></el-icon>
+            <el-icon v-else-if="channel.type === 'telegram'"><Promotion /></el-icon>
+            <el-icon v-else><ChatDotRound /></el-icon>
+            <span>{{ channel.name }}</span>
+          </button>
+        </div>
+        <div v-if="activeCustomerServiceChannel" class="dialog-support-tab-content">
+          <span class="dialog-support-channel-name">{{ activeCustomerServiceChannel.name }}</span>
+          <img
+            v-if="activeCustomerServiceChannel.kind === 'qr'"
+            :src="activeCustomerServiceChannel.value"
+            :alt="activeCustomerServiceChannel.name"
+          />
+          <strong v-else>{{ activeCustomerServiceChannel.displayValue }}</strong>
+        </div>
+      </div>
+      <div v-if="customerServiceChannels.length" class="dialog-support-channels">
+        <a
+          v-for="channel in customerServiceChannels"
+          :key="channel.type"
+          :href="channel.href"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span>{{ channel.badge }}</span>
+          {{ channel.name }} · {{ channel.displayValue }}
+        </a>
+      </div>
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Apple,
   ArrowDown,
+  ChatDotRound,
   Check,
   ChromeFilled,
   Connection,
@@ -154,23 +229,29 @@ import {
   HomeFilled,
   Money,
   Monitor,
+  Menu,
+  Message,
+  Phone,
   Promotion,
   Refresh,
+  Service,
   Setting,
   SwitchButton,
   Tickets,
   Wallet
 } from '@element-plus/icons-vue'
 import { getCustomerServiceConfig } from '@/api/support'
-import { LOCALE_STORAGE_KEY, type AppLocale } from '@/i18n'
+import { LOCALE_STORAGE_KEY, localeHtmlLang, localeOptions, supportedLocales, type AppLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallet'
+import { writeBrowserStorage } from '@/utils/browserStorage'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const walletStore = useWalletStore()
 const { locale, t } = useI18n()
+const mobileMenuOpen = ref(false)
 const LEGACY_DEFAULT_SERVICE_NAME = 'Youou-ASO Support'
 const LEGACY_DEFAULT_CONTACT_HINT = 'Scan the QR code to contact customer service for recharge.'
 const ZH_DEFAULT_SERVICE_NAME = 'Youou-ASO 客服'
@@ -179,12 +260,29 @@ const rechargeDialogVisible = ref(false)
 const customerServiceQrUrl = ref('')
 const customerServiceName = ref('')
 const customerServiceHint = ref('')
+type CustomerServiceChannelType = 'email' | 'phone' | 'telegram' | 'wechat' | 'teams' | 'whatsapp'
+interface CustomerServiceChannel {
+  type: CustomerServiceChannelType
+  name: string
+  value: string
+  displayValue: string
+  href: string
+  badge: string
+  kind: 'text' | 'qr'
+}
+const customerServiceChannels = ref<CustomerServiceChannel[]>([])
+const selectedCustomerServiceChannel = ref<CustomerServiceChannelType | null>(null)
 
 const currentLocale = computed(() => locale.value as AppLocale)
 const walletBalance = computed(() => walletStore.balance)
 const walletLoading = computed(() => walletStore.loading)
+const activeCustomerServiceChannel = computed(() => (
+  customerServiceChannels.value.find(({ type }) => type === selectedCustomerServiceChannel.value)
+  || customerServiceChannels.value[0]
+  || null
+))
 const currentLanguageLabel = computed(() => {
-  return currentLocale.value === 'en-US' ? t('common.english') : t('common.chinese')
+  return localeOptions.find(({ code }) => code === currentLocale.value)?.nativeLabel || currentLocale.value
 })
 const activeMenu = computed(() => {
   const menu = route.meta.activeMenu
@@ -219,13 +317,27 @@ const accountInitial = computed(() => {
 
 onMounted(() => {
   void loadWallet()
+  void loadCustomerServiceConfig()
+  window.addEventListener('focus', refreshCustomerServiceConfig)
 })
 
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshCustomerServiceConfig)
+})
+
+
+watch(() => route.fullPath, () => {
+  mobileMenuOpen.value = false
+  void loadCustomerServiceConfig()
+})
+watch(locale, () => { void loadCustomerServiceConfig() })
+
 function setLocale(nextLocale: AppLocale | string | number | object) {
-  if (nextLocale !== 'zh-CN' && nextLocale !== 'en-US') return
-  locale.value = nextLocale
-  window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale)
-  document.documentElement.lang = nextLocale === 'zh-CN' ? 'zh-CN' : 'en'
+  if (!supportedLocales.includes(nextLocale as AppLocale)) return
+  const normalized = nextLocale as AppLocale
+  locale.value = normalized
+  writeBrowserStorage(LOCALE_STORAGE_KEY, normalized)
+  document.documentElement.lang = localeHtmlLang[normalized]
 }
 
 async function loadWallet() {
@@ -241,11 +353,81 @@ async function loadCustomerServiceConfig() {
     const config = await getCustomerServiceConfig()
     customerServiceName.value = localizeServiceName(config.serviceName)
     customerServiceHint.value = localizeContactHint(config.contactHint)
-    customerServiceQrUrl.value = config.enabled && config.qrCodeUrl ? config.qrCodeUrl : ''
+    customerServiceQrUrl.value = config.qrCodeUrl || ''
+    customerServiceChannels.value = buildVisibleCustomerServiceChannels(config)
+    if (!customerServiceChannels.value.some(({ type }) => type === selectedCustomerServiceChannel.value)) {
+      selectedCustomerServiceChannel.value = customerServiceChannels.value[0]?.type || null
+    }
   } catch {
     customerServiceName.value = ''
     customerServiceHint.value = ''
     customerServiceQrUrl.value = ''
+    customerServiceChannels.value = []
+    selectedCustomerServiceChannel.value = null
+  }
+}
+
+function refreshCustomerServiceConfig() {
+  void loadCustomerServiceConfig()
+}
+
+function buildVisibleCustomerServiceChannels(config: {
+  email: string | null
+  emailVisible: boolean
+  phone: string | null
+  phoneVisible: boolean
+  telegramQrUrl: string | null
+  telegramQrVisible: boolean
+  wechatQrUrl: string | null
+  wechatQrVisible: boolean
+}): CustomerServiceChannel[] {
+  return [
+    config.emailVisible && config.email ? createVisibleCustomerServiceChannel('email', t('supportConfig.email'), config.email, '@', 'text') : null,
+    config.phoneVisible && config.phone ? createVisibleCustomerServiceChannel('phone', t('supportConfig.phone'), config.phone, 'P', 'text') : null,
+    config.telegramQrVisible && config.telegramQrUrl ? createVisibleCustomerServiceChannel('telegram', 'Telegram', config.telegramQrUrl, 'T', 'qr') : null,
+    config.wechatQrVisible && config.wechatQrUrl ? createVisibleCustomerServiceChannel('wechat', t('supportConfig.wechatQr'), config.wechatQrUrl, 'W', 'qr') : null
+  ].filter((channel): channel is CustomerServiceChannel => channel !== null)
+}
+
+function createVisibleCustomerServiceChannel(
+  type: CustomerServiceChannelType,
+  name: string,
+  value: string,
+  badge: string,
+  kind: 'text' | 'qr'
+): CustomerServiceChannel {
+  return { type, name, value, displayValue: value, href: '', badge, kind }
+}
+
+function buildCustomerServiceChannels(config: {
+  email: string | null
+  teamsUrl: string | null
+  telegramUrl: string | null
+  whatsappUrl: string | null
+}): CustomerServiceChannel[] {
+  return [
+    config.email ? createCustomerServiceChannel('email', t('supportConfig.email'), config.email, `mailto:${config.email}`, '@') : null,
+    config.teamsUrl ? createCustomerServiceChannel('teams', 'Microsoft Teams', config.teamsUrl, config.teamsUrl, 'T') : null,
+    config.telegramUrl ? createCustomerServiceChannel('telegram', 'Telegram', config.telegramUrl, config.telegramUrl, '➤') : null,
+    config.whatsappUrl ? createCustomerServiceChannel('whatsapp', 'WhatsApp', config.whatsappUrl, config.whatsappUrl, 'W') : null
+  ].filter((channel): channel is CustomerServiceChannel => channel !== null)
+}
+
+function createCustomerServiceChannel(
+  type: CustomerServiceChannelType,
+  name: string,
+  value: string,
+  href: string,
+  badge: string
+): CustomerServiceChannel {
+  return {
+    type,
+    name,
+    value,
+    href,
+    badge,
+    kind: 'text',
+    displayValue: type === 'email' ? value : value.replace(/^https?:\/\//i, '').replace(/\/$/, '')
   }
 }
 
@@ -300,8 +482,10 @@ async function logout() {
 }
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
-  border-right: 1px solid #e6eaf0;
+  border-right: 1px solid #e2e8f0;
 }
 
 .shell-brand {
@@ -311,7 +495,7 @@ async function logout() {
   gap: 10px;
   padding: 0 20px;
   font-weight: 700;
-  color: #182230;
+  color: #0f172a;
   text-decoration: none;
   cursor: pointer;
 }
@@ -326,7 +510,196 @@ async function logout() {
 }
 
 .shell-menu {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
   border-right: 0;
+}
+
+.sidebar-support {
+  width: calc(100% - 24px);
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 12px 14px;
+  padding: 13px 10px 11px;
+  overflow: visible;
+  border: 1px solid rgb(96 165 250 / 24%);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 50% 0%, rgb(59 130 246 / 17%), transparent 42%),
+    linear-gradient(180deg, #172a47 0%, #102039 100%);
+  box-shadow: 0 14px 30px rgb(2 8 23 / 32%);
+  color: #f8fafc;
+  text-align: center;
+}
+
+.sidebar-support-heading {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.sidebar-support-icon {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #29466e;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #233f67, #1a3153);
+  box-shadow: 0 7px 18px rgb(2 8 23 / 30%);
+  color: #7db3ff;
+  font-size: 23px;
+}
+
+.sidebar-support-status {
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #172a47;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.sidebar-support-title {
+  margin-top: 1px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.sidebar-support-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: #9fb0c8;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-support-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #9fb0c8;
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.sidebar-support-channels {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
+  gap: 4px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid rgb(148 163 184 / 16%);
+  border-radius: 11px;
+  background: rgb(5 14 29 / 35%);
+}
+
+.sidebar-support-channels button {
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #9fb0c8;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.sidebar-support-channels button:hover,
+.sidebar-support-channels button.active {
+  background: #2563c7;
+  box-shadow: 0 5px 12px rgb(15 70 160 / 32%);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.sidebar-support-channels .channel-email {
+  color: #60a5fa;
+}
+
+.sidebar-support-channels .channel-phone {
+  color: #a5b4fc;
+}
+
+.sidebar-support-channels .channel-telegram {
+  color: #67c7ef;
+}
+
+.sidebar-support-channels .channel-wechat {
+  color: #4ade80;
+}
+
+.sidebar-support-channels button.active {
+  color: #ffffff;
+}
+
+.channel-letter {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.sidebar-support-contact {
+  width: 100%;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 9px;
+  border: 1px solid rgb(148 163 184 / 16%);
+  border-radius: 9px;
+  background: rgb(5 14 29 / 42%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+  text-align: center;
+}
+
+.sidebar-support-contact span {
+  color: #7f96b5;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sidebar-support-contact strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: #dce8f8;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-support-contact img {
+  width: 92px;
+  height: 92px;
+  margin-top: 5px;
+  border: 5px solid #ffffff;
+  border-radius: 8px;
+  background: #ffffff;
+  object-fit: contain;
 }
 
 .topbar {
@@ -335,8 +708,8 @@ async function logout() {
   gap: 16px;
   justify-content: space-between;
   background: #ffffff;
-  border-bottom: 1px solid #e6eaf0;
-  color: #475467;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
 }
 
 .topbar-title {
@@ -350,7 +723,7 @@ async function logout() {
   gap: 8px;
   margin: 0;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
@@ -365,7 +738,7 @@ async function logout() {
 .heading-parent {
   min-width: 0;
   overflow: hidden;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
   text-overflow: ellipsis;
 }
@@ -378,7 +751,7 @@ async function logout() {
 .heading-current {
   min-width: 0;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-weight: 800;
   text-overflow: ellipsis;
 }
@@ -398,12 +771,12 @@ async function logout() {
 }
 
 .wallet-label {
-  color: #344054;
+  color: #334155;
   font-size: 14px;
 }
 
 .wallet-pill strong {
-  color: #ff9300;
+  color: #b45309;
   font-size: 20px;
   font-weight: 900;
   line-height: 1;
@@ -416,7 +789,7 @@ async function logout() {
   padding: 0 4px;
   border: 0;
   background: transparent;
-  color: #2f7df4;
+  color: #2563eb;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -433,7 +806,7 @@ async function logout() {
   min-width: 78px;
   border: 0;
   border-radius: 999px;
-  background: #ff9700;
+  background: #b45309;
   box-shadow: 0 8px 18px rgb(255 151 0 / 24%);
   color: #ffffff;
   font-size: 16px;
@@ -448,10 +821,10 @@ async function logout() {
   justify-content: center;
   gap: 8px;
   padding: 0 12px;
-  border: 1px solid #d8dee8;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #344054;
+  color: #334155;
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -465,7 +838,7 @@ async function logout() {
 
 .language-check {
   opacity: 0;
-  color: #1b75d0;
+  color: #1d4ed8;
 }
 
 .language-check.visible {
@@ -478,10 +851,10 @@ async function logout() {
   align-items: center;
   gap: 10px;
   padding: 0 10px 0 6px;
-  border: 1px solid #d8dee8;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #344054;
+  color: #334155;
   cursor: pointer;
 }
 
@@ -492,8 +865,8 @@ async function logout() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #ffb11b;
-  color: #d9361f;
+  background: #fbbf24;
+  color: #92400e;
   font-weight: 800;
 }
 
@@ -505,7 +878,7 @@ async function logout() {
 }
 
 .account-name {
-  color: #344054;
+  color: #334155;
   font-weight: 700;
 }
 
@@ -515,11 +888,11 @@ async function logout() {
   flex-direction: column;
   gap: 4px;
   padding: 10px 14px;
-  color: #182230;
+  color: #0f172a;
 }
 
 .account-summary span {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 
@@ -561,22 +934,155 @@ async function logout() {
     linear-gradient(rgb(24 34 48 / 8%) 1px, transparent 1px),
     #f8fafc;
   background-size: 18px 18px;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
   font-weight: 700;
 }
 
 .recharge-qr-panel p {
   margin: 0;
-  color: #475467;
+  color: #475569;
   font-size: 14px;
   line-height: 1.7;
 }
 
 .customer-service-name {
-  color: #182230;
+  color: #0f172a;
   font-size: 15px;
 }
+
+.dialog-support-channels {
+  display: none;
+}
+
+.dialog-support-tab-panel {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.dialog-support-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.dialog-support-tabs button {
+  min-width: 0;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 5px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dialog-support-tabs button:hover {
+  color: #2563eb;
+}
+
+.dialog-support-tabs button.active {
+  border-color: #d4e3fb;
+  background: #ffffff;
+  box-shadow: 0 3px 10px rgb(15 23 42 / 7%);
+  color: #2563eb;
+}
+
+.dialog-support-tabs button .el-icon {
+  font-size: 18px;
+}
+
+.dialog-support-tabs button span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-support-tab-content {
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.dialog-support-channel-name {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dialog-support-tab-content strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.dialog-support-tab-content img {
+  width: 180px;
+  height: 180px;
+  padding: 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  object-fit: contain;
+}
+
+.dialog-support-channels a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-support-channels a:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.dialog-support-channels a span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: #dbeafe;
+  color: #2563eb;
+  font-weight: 900;
+}
+
+
+.mobile-menu-trigger { display: none; width: 38px; height: 38px; align-items: center; justify-content: center; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; color: #334155; cursor: pointer; }
 
 @media (max-width: 700px) {
   .sidebar {

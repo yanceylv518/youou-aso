@@ -12,5 +12,13 @@ public interface MarketRegionRepository {
 
     List<MarketRegion> findEnabled();
 
+    default MarketRegion save(MarketRegion region) {
+        return region;
+    }
+
     void update(MarketRegion region);
+
+    default void renameAndUpdate(String originalCode, MarketRegion region) {
+        update(region);
+    }
 }

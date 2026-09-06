@@ -15,16 +15,21 @@ import com.youou.aso.modules.appmanagement.repository.MarketRegionRepository;
 import com.youou.aso.modules.order.domain.AsoOrder;
 import com.youou.aso.modules.order.domain.OrderCommentDetail;
 import com.youou.aso.modules.order.domain.OrderItem;
+import com.youou.aso.modules.order.domain.OrderEvent;
 import com.youou.aso.modules.order.domain.OrderStatus;
 import com.youou.aso.modules.order.domain.OrderType;
 import com.youou.aso.modules.order.dto.CreateOrderCommand;
 import com.youou.aso.modules.order.dto.OrderQuery;
 import com.youou.aso.modules.order.repository.OrderCommentDetailRepository;
 import com.youou.aso.modules.order.repository.OrderItemRepository;
+import com.youou.aso.modules.order.repository.OrderEventRepository;
 import com.youou.aso.modules.order.repository.OrderRepository;
 import com.youou.aso.modules.pricing.domain.PriceCode;
 import com.youou.aso.modules.pricing.domain.PricingConfig;
+import com.youou.aso.modules.pricing.domain.OrderModuleConfig;
+import com.youou.aso.modules.pricing.repository.OrderModuleConfigRepository;
 import com.youou.aso.modules.pricing.repository.PricingConfigRepository;
+import com.youou.aso.modules.pricing.service.OrderModuleConfigService;
 import com.youou.aso.modules.wallet.service.WalletDebitResult;
 import com.youou.aso.modules.wallet.service.WalletService;
 import org.junit.jupiter.api.Test;
@@ -52,9 +57,11 @@ class OrderServiceTest {
     private final FakeCustomerAppRepository appRepository = new FakeCustomerAppRepository();
     private final FakeMarketRegionRepository marketRegionRepository = new FakeMarketRegionRepository();
     private final FakePricingConfigRepository pricingRepository = new FakePricingConfigRepository();
+    private final FakeOrderModuleConfigRepository orderModuleRepository = new FakeOrderModuleConfigRepository();
     private final FakeCustomerAccountRepository customerAccountRepository = new FakeCustomerAccountRepository();
     private final FakeOrderRepository orderRepository = new FakeOrderRepository();
     private final FakeOrderItemRepository orderItemRepository = new FakeOrderItemRepository();
+    private final FakeOrderEventRepository orderEventRepository = new FakeOrderEventRepository();
     private final FakeOrderCommentDetailRepository orderCommentDetailRepository = new FakeOrderCommentDetailRepository();
     private final FakeWalletService walletService = new FakeWalletService();
     private final FakeOrderNotificationSender orderNotificationSender = new FakeOrderNotificationSender();
@@ -62,13 +69,16 @@ class OrderServiceTest {
             appRepository,
             marketRegionRepository,
             pricingRepository,
+            new OrderModuleConfigService(orderModuleRepository),
             customerAccountRepository,
             orderRepository,
             orderItemRepository,
+            orderEventRepository,
             orderCommentDetailRepository,
             walletService,
             orderNotificationSender,
-            CLOCK
+            CLOCK,
+            org.mockito.Mockito.mock(ReviewAttachmentService.class)
     );
 
     @Test
@@ -115,6 +125,54 @@ class OrderServiceTest {
     }
 
     @Test
+    void adminCreatedOrderSkipsConfirmationAndStartsPendingExecution() {
+        walletService.balance = new BigDecimal("100.00");
+
+        AsoOrder order = orderService.createAdminOrderForCustomer(10L, 99L, new CreateOrderCommand(
+                1L,
+                OrderType.KEYWORD_INSTALL,
+                LocalDate.of(2026, 6, 19),
+                LocalDate.of(2026, 6, 21),
+                8,
+                List.of("chat app"),
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_EXECUTION);
+        assertThat(order.getConfirmedByAdminId()).isEqualTo(99L);
+        assertThat(order.getConfirmedAt()).isEqualTo(LocalDateTime.of(2026, 6, 20, 8, 0));
+        assertThat(order.getDeductedTransactionId()).isNotNull();
+    }
+
+    @Test
+    void adminCreatedOrderWithInsufficientBalanceStartsPendingPayment() {
+        walletService.balance = BigDecimal.ZERO;
+
+        AsoOrder order = orderService.createAdminOrderForCustomer(10L, 99L, new CreateOrderCommand(
+                1L,
+                OrderType.KEYWORD_INSTALL,
+                LocalDate.of(2026, 6, 19),
+                LocalDate.of(2026, 6, 21),
+                8,
+                List.of("chat app"),
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        assertThat(order.getConfirmedByAdminId()).isEqualTo(99L);
+        assertThat(order.getConfirmedAt()).isNull();
+        assertThat(order.getDeductedTransactionId()).isNull();
+    }
+
+    @Test
     void createKeywordInstallOrderChargesPerKeywordQuantity() {
         walletService.balance = new BigDecimal("100.00");
 
@@ -144,6 +202,25 @@ class OrderServiceTest {
                         org.assertj.core.groups.Tuple.tuple("chat app", 3, new BigDecimal("3.60")),
                         org.assertj.core.groups.Tuple.tuple("ai assistant", 2, new BigDecimal("2.40"))
                 );
+    }
+
+    @Test
+    void createOrderUsesSelectedModulePriceAndSnapshotsModule() {
+        walletService.balance = new BigDecimal("100.00");
+
+        AsoOrder order = orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L, "US", OrderType.KEYWORD_INSTALL,
+                LocalDate.of(2026, 6, 19), LocalDate.of(2026, 6, 19), 8,
+                null, List.of(new CreateOrderCommand.KeywordQuantity("chat app", 2, "US")),
+                null, null, null, null, null, null, null, 99L
+        ));
+
+        assertThat(order.getOrderModuleId()).isEqualTo(99L);
+        assertThat(order.getOrderModuleName()).isEqualTo("关键词安装（高级）");
+        assertThat(order.getUnitPrice()).isEqualByComparingTo("10.00");
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("20.00");
+        assertThat(order.getItems()).extracting(OrderItem::getUnitPrice)
+                .containsExactly(new BigDecimal("10.00"));
     }
 
     @Test
@@ -273,6 +350,62 @@ class OrderServiceTest {
     }
 
     @Test
+    void createDownloadOrderUsesChinaSpecificPrice() {
+        walletService.balance = new BigDecimal("100.00");
+        pricingRepository.put(PriceCode.DOWNLOAD, "0.50", "0.80");
+
+        AsoOrder order = orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L,
+                "CN",
+                OrderType.DOWNLOAD,
+                LocalDate.of(2026, 6, 19),
+                LocalDate.of(2026, 6, 20),
+                null,
+                List.of(),
+                null,
+                List.of(new CreateOrderCommand.RegionOrderItem("CN", 10, null, null, null, null)),
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("16.00");
+        assertThat(order.getItems()).singleElement()
+                .extracting(OrderItem::getAmount)
+                .isEqualTo(new BigDecimal("16.00"));
+    }
+
+    @Test
+    void createDownloadOrderRejectsChinaMixedWithOtherRegions() {
+        walletService.balance = new BigDecimal("100.00");
+
+        assertThatThrownBy(() -> orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L,
+                null,
+                OrderType.DOWNLOAD,
+                LocalDate.of(2026, 6, 19),
+                LocalDate.of(2026, 6, 20),
+                null,
+                List.of(),
+                null,
+                List.of(
+                        new CreateOrderCommand.RegionOrderItem("CN", 10, null, null, null, null),
+                        new CreateOrderCommand.RegionOrderItem("US", 10, null, null, null, null)
+                ),
+                null,
+                null,
+                null,
+                null,
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BAD_REQUEST);
+    }
+
+    @Test
     void createRatingOrderUsesSeparateFourAndFiveStarPrices() {
         walletService.balance = new BigDecimal("100.00");
 
@@ -363,6 +496,31 @@ class OrderServiceTest {
                         org.assertj.core.groups.Tuple.tuple("RATING_4", "US", 1, new BigDecimal("1.50")),
                         org.assertj.core.groups.Tuple.tuple("RATING_4", "JP", 3, new BigDecimal("4.50"))
                 );
+    }
+
+    @Test
+    void createRatingOrderRejectsMainlandChinaRegion() {
+        walletService.balance = new BigDecimal("100.00");
+
+        assertThatThrownBy(() -> orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L,
+                null,
+                OrderType.RATING,
+                LocalDate.of(2026, 6, 20),
+                LocalDate.of(2026, 6, 20),
+                null,
+                List.of(),
+                null,
+                List.of(new CreateOrderCommand.RegionOrderItem("CN", null, 1, 0, null, null)),
+                null,
+                null,
+                null,
+                null,
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_REGION_NOT_SUPPORTED);
     }
 
     @Test
@@ -479,6 +637,35 @@ class OrderServiceTest {
                         org.assertj.core.groups.Tuple.tuple("JP", 4, "Solid", "Stable and easy to use")
                 );
         assertThat(orderCommentDetailRepository.detailsByOrderId.get(order.getId())).hasSize(2);
+    }
+
+    @Test
+    void createReviewOrderRejectsMainlandChinaRegion() {
+        walletService.balance = new BigDecimal("100.00");
+
+        assertThatThrownBy(() -> orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L,
+                null,
+                OrderType.REVIEW,
+                LocalDate.of(2026, 6, 20),
+                LocalDate.of(2026, 6, 20),
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                List.of(),
+                List.of(new CreateOrderCommand.ReviewDetail("CN", 5, "Great app", "Very useful every day")),
+                null,
+                null,
+                null,
+                null,
+                null
+        )))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.STORE_REGION_NOT_SUPPORTED);
     }
 
     @Test
@@ -639,6 +826,104 @@ class OrderServiceTest {
     }
 
     @Test
+    void editPendingConfirmOrderChargesOnlyTheIncrease() {
+        walletService.balance = new BigDecimal("100.00");
+        AsoOrder order = orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L, OrderType.DOWNLOAD, LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 20),
+                null, List.of(), 10, null, null, null, null));
+        assertThat(walletService.balance).isEqualByComparingTo("95.00");
+
+        AsoOrder updated = orderService.resubmitEditableOrder(10L, order.getId(), new CreateOrderCommand(
+                1L, OrderType.DOWNLOAD, LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 20),
+                null, List.of(), 14, null, null, null, null));
+
+        assertThat(updated.getStatus()).isEqualTo(OrderStatus.PENDING_CONFIRM);
+        assertThat(updated.getTotalAmount()).isEqualByComparingTo("7.00");
+        assertThat(walletService.balance).isEqualByComparingTo("93.00");
+    }
+
+    @Test
+    void editPendingConfirmOrderRefundsOnlyTheDecrease() {
+        walletService.balance = new BigDecimal("100.00");
+        AsoOrder order = orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L, OrderType.DOWNLOAD, LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 20),
+                null, List.of(), 10, null, null, null, null));
+
+        AsoOrder updated = orderService.resubmitEditableOrder(10L, order.getId(), new CreateOrderCommand(
+                1L, OrderType.DOWNLOAD, LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 20),
+                null, List.of(), 6, null, null, null, null));
+
+        assertThat(updated.getTotalAmount()).isEqualByComparingTo("3.00");
+        assertThat(walletService.balance).isEqualByComparingTo("97.00");
+    }
+
+    @Test
+    void editOrderIsRejectedAfterAdminConfirmation() {
+        AsoOrder order = sampleOrder();
+        order.setId(801L);
+        order.setStatus(OrderStatus.PENDING_EXECUTION);
+        orderRepository.orders.put(order.getId(), order);
+
+        assertThatThrownBy(() -> orderService.resubmitEditableOrder(10L, order.getId(), new CreateOrderCommand(
+                1L, OrderType.DOWNLOAD, LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 20),
+                null, List.of(), 6, null, null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(ErrorCode.ORDER_STATUS_INVALID);
+    }
+
+    @Test
+    void payPendingPaymentOrderUsesExistingDetailsWithoutEditing() {
+        walletService.balance = new BigDecimal("1.00");
+        AsoOrder pending = orderService.createCustomerOrder(10L, new CreateOrderCommand(
+                1L,
+                OrderType.DOWNLOAD,
+                LocalDate.of(2026, 6, 19),
+                LocalDate.of(2026, 6, 20),
+                null,
+                List.of(),
+                10,
+                null,
+                null,
+                null,
+                null
+        ));
+        walletService.balance = new BigDecimal("100.00");
+
+        AsoOrder paid = orderService.payPendingPaymentOrder(10L, pending.getId());
+
+        assertThat(paid.getStatus()).isEqualTo(OrderStatus.PENDING_CONFIRM);
+        assertThat(paid.getTotalAmount()).isEqualByComparingTo("10.00");
+        assertThat(paid.getBalanceAfter()).isEqualByComparingTo("90.00");
+        assertThat(paid.getDeductedTransactionId()).isNotNull();
+    }
+
+    @Test
+    void payAdminCreatedPendingPaymentOrderSkipsConfirmation() {
+        walletService.balance = BigDecimal.ZERO;
+        AsoOrder pending = orderService.createAdminOrderForCustomer(10L, 99L, new CreateOrderCommand(
+                1L,
+                OrderType.DOWNLOAD,
+                LocalDate.of(2026, 6, 19),
+                LocalDate.of(2026, 6, 20),
+                null,
+                List.of(),
+                10,
+                null,
+                null,
+                null,
+                null
+        ));
+        walletService.balance = new BigDecimal("100.00");
+
+        AsoOrder paid = orderService.payPendingPaymentOrder(10L, pending.getId());
+
+        assertThat(paid.getStatus()).isEqualTo(OrderStatus.PENDING_EXECUTION);
+        assertThat(paid.getConfirmedByAdminId()).isEqualTo(99L);
+        assertThat(paid.getConfirmedAt()).isEqualTo(LocalDateTime.of(2026, 6, 20, 8, 0));
+    }
+
+    @Test
     void executeOrderCompletesImmediatelyWhenExpectedCompletionHasPassed() {
         AsoOrder existing = sampleOrder();
         existing.setId(99L);
@@ -720,6 +1005,11 @@ class OrderServiceTest {
         existing.setExecutedAt(expectedNow().minusHours(1));
         existing.setExpectedCompletedAt(expectedNow().plusDays(1));
         orderRepository.orders.put(204L, existing);
+        OrderItem item = new OrderItem();
+        item.setId(2040L);
+        item.setQuantity(60);
+        item.setUnitPrice(new BigDecimal("0.50"));
+        orderItemRepository.itemsByOrderId.put(204L, new ArrayList<>(List.of(item)));
 
         AsoOrder paused = orderService.pauseOrder(204L, 7L);
 
@@ -743,44 +1033,98 @@ class OrderServiceTest {
     }
 
     @Test
-    void pauseOrdersPausesAllExecutingOrders() {
+    void batchPauseMovesExecutingOrdersToPaused() {
         AsoOrder first = sampleOrder();
         first.setId(206L);
         first.setStatus(OrderStatus.EXECUTING);
-        orderRepository.orders.put(206L, first);
-
         AsoOrder second = sampleOrder();
         second.setId(207L);
         second.setStatus(OrderStatus.EXECUTING);
+        orderRepository.orders.put(206L, first);
         orderRepository.orders.put(207L, second);
 
-        List<AsoOrder> result = orderService.pauseOrders(List.of(206L, 207L), 7L);
+        List<AsoOrder> paused = orderService.pauseOrders(List.of(206L, 207L), 7L);
 
-        assertThat(result).extracting(AsoOrder::getId).containsExactly(206L, 207L);
-        assertThat(orderRepository.orders.get(206L).getStatus()).isEqualTo(OrderStatus.PAUSED);
-        assertThat(orderRepository.orders.get(207L).getStatus()).isEqualTo(OrderStatus.PAUSED);
+        assertThat(paused).extracting(AsoOrder::getStatus)
+                .containsExactly(OrderStatus.PAUSED, OrderStatus.PAUSED);
+    }
+    @Test
+    void updatePausedOrderRefundsImmediatelyWhenQuantityDecreases() {
+        AsoOrder paused = sampleOrder();
+        paused.setId(208L);
+        paused.setStatus(OrderStatus.PAUSED);
+        orderRepository.orders.put(208L, paused);
+        OrderItem item = new OrderItem();
+        item.setId(2080L);
+        item.setQuantity(60);
+        item.setUnitPrice(new BigDecimal("0.50"));
+        item.setAmount(new BigDecimal("30.00"));
+        orderItemRepository.itemsByOrderId.put(208L, new ArrayList<>(List.of(item)));
+        walletService.balance = new BigDecimal("50.00");
+
+        AsoOrder updated = orderService.updatePausedOrder(
+                208L,
+                7L,
+                List.of(new OrderService.PausedItemEdit(2080L, 40, 10))
+        );
+
+        assertThat(updated.getQuantity()).isEqualTo(40);
+        assertThat(updated.getTotalAmount()).isEqualByComparingTo("20.00");
+        assertThat(updated.getItems()).singleElement()
+                .extracting(OrderItem::getQuantity, OrderItem::getCompletedQuantity, OrderItem::getAmount)
+                .containsExactly(40, 10, new BigDecimal("20.00"));
+        assertThat(walletService.balance).isEqualByComparingTo("60.00");
     }
 
     @Test
-    void pauseOrdersRejectsNonExecutingOrderWithoutPartialUpdate() {
-        AsoOrder first = sampleOrder();
-        first.setId(208L);
-        first.setStatus(OrderStatus.EXECUTING);
-        orderRepository.orders.put(208L, first);
+    void updatePausedOrderDebitsImmediatelyWhenQuantityIncreases() {
+        AsoOrder paused = sampleOrder();
+        paused.setId(209L);
+        paused.setStatus(OrderStatus.PAUSED);
+        orderRepository.orders.put(209L, paused);
+        OrderItem item = new OrderItem();
+        item.setId(2090L);
+        item.setQuantity(60);
+        item.setUnitPrice(new BigDecimal("0.50"));
+        item.setAmount(new BigDecimal("30.00"));
+        orderItemRepository.itemsByOrderId.put(209L, new ArrayList<>(List.of(item)));
+        walletService.balance = new BigDecimal("50.00");
 
-        AsoOrder invalid = sampleOrder();
-        invalid.setId(209L);
-        invalid.setStatus(OrderStatus.PAUSED);
-        orderRepository.orders.put(209L, invalid);
+        AsoOrder updated = orderService.updatePausedOrder(
+                209L,
+                7L,
+                List.of(new OrderService.PausedItemEdit(2090L, 80, 15))
+        );
 
-        assertThatThrownBy(() -> orderService.pauseOrders(List.of(208L, 209L), 7L))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.ORDER_STATUS_INVALID);
-        assertThat(orderRepository.orders.get(208L).getStatus()).isEqualTo(OrderStatus.EXECUTING);
-        assertThat(orderRepository.orders.get(209L).getStatus()).isEqualTo(OrderStatus.PAUSED);
+        assertThat(updated.getQuantity()).isEqualTo(80);
+        assertThat(updated.getTotalAmount()).isEqualByComparingTo("40.00");
+        assertThat(walletService.balance).isEqualByComparingTo("40.00");
     }
 
+    @Test
+    void updatePausedOrderRejectsIncreaseWhenBalanceIsInsufficient() {
+        AsoOrder paused = sampleOrder();
+        paused.setId(2091L);
+        paused.setStatus(OrderStatus.PAUSED);
+        orderRepository.orders.put(2091L, paused);
+        OrderItem item = new OrderItem();
+        item.setId(20910L);
+        item.setQuantity(60);
+        item.setUnitPrice(new BigDecimal("0.50"));
+        item.setAmount(new BigDecimal("30.00"));
+        orderItemRepository.itemsByOrderId.put(2091L, new ArrayList<>(List.of(item)));
+        walletService.balance = new BigDecimal("5.00");
+
+        assertThatThrownBy(() -> orderService.updatePausedOrder(
+                2091L,
+                7L,
+                List.of(new OrderService.PausedItemEdit(20910L, 80, 10))
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BALANCE_NOT_ENOUGH);
+        assertThat(walletService.balance).isEqualByComparingTo("5.00");
+    }
     @Test
     void resumeOrderMovesPausedOrderToExecuting() {
         AsoOrder existing = sampleOrder();
@@ -882,6 +1226,7 @@ class OrderServiceTest {
         assertThat(cancelled.getRefundTransactionId()).isEqualTo(1L);
         assertThat(walletService.balance).isEqualByComparingTo("100.00");
     }
+
 
     @Test
     void cancelOrderRejectsExecutingOrderWithoutRefunding() {
@@ -1070,6 +1415,37 @@ class OrderServiceTest {
     }
 
     @Test
+    void completeExpiredPausedOrderRefundsEachUnfinishedItem() {
+        AsoOrder paused = sampleOrder();
+        paused.setId(114L);
+        paused.setStatus(OrderStatus.PAUSED);
+        paused.setExpectedCompletedAt(LocalDate.of(2026, 6, 19).atStartOfDay());
+        paused.setDeductedTransactionId(20L);
+        orderRepository.orders.put(114L, paused);
+
+        OrderItem first = new OrderItem();
+        first.setId(1141L);
+        first.setQuantity(10);
+        first.setCompletedQuantity(4);
+        first.setUnitPrice(new BigDecimal("2.00"));
+        OrderItem second = new OrderItem();
+        second.setId(1142L);
+        second.setQuantity(5);
+        second.setCompletedQuantity(3);
+        second.setUnitPrice(new BigDecimal("3.00"));
+        orderItemRepository.itemsByOrderId.put(114L, new ArrayList<>(List.of(first, second)));
+        walletService.balance = new BigDecimal("50.00");
+
+        int completedCount = orderService.completeExpiredExecutingOrders();
+
+        assertThat(completedCount).isEqualTo(1);
+        assertThat(paused.getStatus()).isEqualTo(OrderStatus.COMPLETED);
+        assertThat(paused.getRefundAmount()).isEqualByComparingTo("18.00");
+        assertThat(paused.getRefundTransactionId()).isEqualTo(1L);
+        assertThat(walletService.balance).isEqualByComparingTo("68.00");
+    }
+
+    @Test
     void listAdminOrdersAppliesKeywordRegionTypeAndDateFilters() {
         AsoOrder matching = sampleOrder();
         matching.setId(106L);
@@ -1188,7 +1564,7 @@ class OrderServiceTest {
 
     private static final class FakeCustomerAppRepository implements CustomerAppRepository {
         private final CustomerApp app;
-        private List<String> linkedRegions = List.of("US", "JP");
+        private List<String> linkedRegions = List.of("US", "JP", "CN");
 
         private FakeCustomerAppRepository() {
             app = new CustomerApp();
@@ -1320,7 +1696,7 @@ class OrderServiceTest {
     private static final class FakeMarketRegionRepository implements MarketRegionRepository {
         @Override
         public Optional<MarketRegion> findByCode(String code) {
-            if (!List.of("US", "JP").contains(code)) {
+            if (!List.of("US", "JP", "CN").contains(code)) {
                 return Optional.empty();
             }
             MarketRegion region = new MarketRegion();
@@ -1363,6 +1739,12 @@ class OrderServiceTest {
             prices.put(code, PricingConfig.enabled(code, new BigDecimal(price)));
         }
 
+        private void put(PriceCode code, String price, String chinaPrice) {
+            PricingConfig config = PricingConfig.enabled(code, new BigDecimal(price));
+            config.setChinaUnitPrice(new BigDecimal(chinaPrice));
+            prices.put(code, config);
+        }
+
         @Override
         public List<PricingConfig> findAll() {
             return List.copyOf(prices.values());
@@ -1376,6 +1758,20 @@ class OrderServiceTest {
         @Override
         public void saveAll(List<PricingConfig> configs) {
         }
+    }
+
+    private static final class FakeOrderModuleConfigRepository implements OrderModuleConfigRepository {
+        private final OrderModuleConfig module = new OrderModuleConfig(
+                99L, "关键词安装（高级）", "Advanced keyword installs", "Расширенная установка", "Instalação avançada", "Instalación avanzada",
+                "description", "description", "description", "description", "description",
+                OrderType.KEYWORD_INSTALL, new BigDecimal("10.00"), new BigDecimal("12.00"), true, 2
+        );
+
+        @Override public List<OrderModuleConfig> findAll() { return List.of(module); }
+        @Override public List<OrderModuleConfig> findEnabled(OrderType orderType) { return orderType == module.orderType() ? List.of(module) : List.of(); }
+        @Override public Optional<OrderModuleConfig> findById(Long id) { return module.id().equals(id) ? Optional.of(module) : Optional.empty(); }
+        @Override public OrderModuleConfig save(OrderModuleConfig value) { return value; }
+        @Override public void deleteById(Long id) { }
     }
 
     private static final class FakeOrderRepository implements OrderRepository {
@@ -1426,9 +1822,9 @@ class OrderServiceTest {
         }
 
         @Override
-        public List<AsoOrder> findExecutingDueBefore(LocalDateTime now) {
+        public List<AsoOrder> findDueBefore(LocalDateTime now) {
             return orders.values().stream()
-                    .filter(order -> OrderStatus.EXECUTING.equals(order.getStatus()))
+                    .filter(order -> OrderStatus.EXECUTING.equals(order.getStatus()) || OrderStatus.PAUSED.equals(order.getStatus()) || OrderStatus.PENDING_EXECUTION.equals(order.getStatus()))
                     .filter(order -> order.getExpectedCompletedAt() != null && !order.getExpectedCompletedAt().isAfter(now))
                     .sorted(java.util.Comparator.comparing(AsoOrder::getId))
                     .toList();
@@ -1482,6 +1878,20 @@ class OrderServiceTest {
         }
     }
 
+    private static final class FakeOrderEventRepository implements OrderEventRepository {
+        private final Map<Long, List<OrderEvent>> eventsByOrderId = new java.util.HashMap<>();
+
+        @Override
+        public void save(OrderEvent event) {
+            event.setCreatedAt(expectedNow());
+            eventsByOrderId.computeIfAbsent(event.getOrderId(), ignored -> new ArrayList<>()).add(event);
+        }
+
+        @Override
+        public List<OrderEvent> findByOrderId(Long orderId) {
+            return List.copyOf(eventsByOrderId.getOrDefault(orderId, List.of()));
+        }
+    }
     private static final class FakeOrderItemRepository implements OrderItemRepository {
         private final Map<Long, List<OrderItem>> itemsByOrderId = new java.util.HashMap<>();
 

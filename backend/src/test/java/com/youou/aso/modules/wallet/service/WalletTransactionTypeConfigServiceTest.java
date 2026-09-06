@@ -34,11 +34,11 @@ class WalletTransactionTypeConfigServiceTest {
     @Test
     void updateConfigsOnlyChangesDisplayNamesForExistingTypes() {
         List<WalletTransactionTypeConfigResult> results = service.updateConfigs(List.of(
-                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.ORDER_DEDUCT, "消费扣款", "Consumption"),
-                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.ORDER_REFUND, "订单返款", "Refund"),
-                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.ADMIN_RECHARGE, "客户充值", "Recharge"),
-                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.ADMIN_ADJUSTMENT, "人工调整", "Adjustment"),
-                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.DELIVERY, "配送", "Delivery")
+                command(WalletTransactionType.ORDER_DEDUCT, "消费扣款", "Consumption"),
+                command(WalletTransactionType.ORDER_REFUND, "订单返款", "Refund"),
+                command(WalletTransactionType.ADMIN_RECHARGE, "客户充值", "Recharge"),
+                command(WalletTransactionType.ADMIN_ADJUSTMENT, "人工调整", "Adjustment"),
+                command(WalletTransactionType.DELIVERY, "配送", "Delivery")
         ));
 
         assertThat(results).hasSize(WalletTransactionType.values().length);
@@ -50,11 +50,15 @@ class WalletTransactionTypeConfigServiceTest {
     @Test
     void updateConfigsRejectsBlankDisplayName() {
         assertThatThrownBy(() -> service.updateConfigs(List.of(
-                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.ORDER_DEDUCT, " ", "Consumption")
+                new UpdateWalletTransactionTypeConfigCommand(WalletTransactionType.ORDER_DEDUCT, " ", "Consumption", "Consumption", "Consumption", "Consumption")
         )))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CONFIG_VALUE_INVALID);
+    }
+
+    private static UpdateWalletTransactionTypeConfigCommand command(WalletTransactionType type, String zh, String en) {
+        return new UpdateWalletTransactionTypeConfigCommand(type, zh, en, en, en, en);
     }
 
     private static final class FakeWalletTransactionTypeConfigRepository implements WalletTransactionTypeConfigRepository {

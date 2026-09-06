@@ -112,6 +112,26 @@ class SpecialOrderAuditServiceTest {
     }
 
     @Test
+    void submitChartRankGuaranteeStoresChartTypeInsteadOfKeywordInput() {
+        SpecialOrderAudit audit = service.submitCustomerAudit(10L, new SubmitSpecialAuditCommand(
+                1L,
+                null,
+                OrderType.CHART_RANK_GUARANTEE,
+                "Keep chart position",
+                List.of(new SubmitSpecialAuditCommand.AuditItem("US", null, "Top Free chart", 10, null))
+        ));
+
+        assertThat(audit.getOrderType()).isEqualTo(OrderType.CHART_RANK_GUARANTEE);
+        assertThat(audit.getItems())
+                .extracting(
+                        SpecialOrderAuditItem::getRegionCode,
+                        SpecialOrderAuditItem::getChartType,
+                        SpecialOrderAuditItem::getTargetRank,
+                        SpecialOrderAuditItem::getCoverageNote
+                )
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("US", "Top Free chart", 10, null));
+    }
+    @Test
     void approveAuditLocksNegotiatedContentAndPrice() {
         SpecialOrderAudit audit = pendingAudit();
         auditRepository.save(audit);
@@ -126,6 +146,26 @@ class SpecialOrderAuditServiceTest {
         assertThat(approved.getNegotiatedPrice()).isEqualByComparingTo("88.00");
         assertThat(approved.getReviewedByAdminId()).isEqualTo(7L);
         assertThat(approved.getReviewedAt()).isEqualTo(expectedNow());
+    }
+
+    @Test
+    void approveRankAuditCalculatesPriceFromEachItemsUnitPriceAndDays() {
+        SpecialOrderAudit audit = service.submitCustomerAudit(10L, new SubmitSpecialAuditCommand(
+                1L, null, OrderType.RANK_GUARANTEE, "Keep ranking", List.of(
+                new SubmitSpecialAuditCommand.AuditItem("US", "chat", 3, null),
+                new SubmitSpecialAuditCommand.AuditItem("US", "assistant", 5, null))));
+
+        SpecialOrderAudit approved = service.reviewAudit(audit.getId(), 7L, new ReviewSpecialAuditCommand(
+                "Approved", null, List.of(
+                new ReviewSpecialAuditCommand.ItemPricing(1L, new BigDecimal("1.25"), 10),
+                new ReviewSpecialAuditCommand.ItemPricing(2L, new BigDecimal("2.00"), 5))));
+
+        assertThat(approved.getNegotiatedPrice()).isEqualByComparingTo("22.50");
+        assertThat(auditItemRepository.itemsByAuditId.get(audit.getId()))
+                .extracting(SpecialOrderAuditItem::getUnitPrice, SpecialOrderAuditItem::getExecutionDays)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(new BigDecimal("1.25"), 10),
+                        org.assertj.core.groups.Tuple.tuple(new BigDecimal("2.00"), 5));
     }
 
     @Test
@@ -339,7 +379,10 @@ class SpecialOrderAuditServiceTest {
 
         @Override
         public void saveAll(Long auditId, List<SpecialOrderAuditItem> items) {
-            items.forEach(item -> item.setAuditId(auditId));
+            for (int index = 0; index < items.size(); index++) {
+                items.get(index).setId((long) index + 1);
+                items.get(index).setAuditId(auditId);
+            }
             itemsByAuditId.put(auditId, new ArrayList<>(items));
         }
 
@@ -348,6 +391,14 @@ class SpecialOrderAuditServiceTest {
             Map<Long, List<SpecialOrderAuditItem>> result = new java.util.HashMap<>();
             auditIds.forEach(auditId -> result.put(auditId, new ArrayList<>(itemsByAuditId.getOrDefault(auditId, List.of()))));
             return result;
+        }
+
+        @Override
+        public void updatePricing(Long id, BigDecimal unitPrice, Integer executionDays) {
+            itemsByAuditId.values().stream().flatMap(List::stream).filter(item -> id.equals(item.getId())).forEach(item -> {
+                item.setUnitPrice(unitPrice);
+                item.setExecutionDays(executionDays);
+            });
         }
     }
 
@@ -392,7 +443,7 @@ class SpecialOrderAuditServiceTest {
         }
 
         @Override
-        public List<AsoOrder> findExecutingDueBefore(java.time.LocalDateTime now) {
+        public List<AsoOrder> findDueBefore(java.time.LocalDateTime now) {
             return List.of();
         }
     }

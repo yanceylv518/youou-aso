@@ -32,6 +32,8 @@ public class JdbcOrderRepository implements OrderRepository {
         long sourceAuditId = rs.getLong("source_audit_id");
         order.setSourceAuditId(rs.wasNull() ? null : sourceAuditId);
         order.setOrderType(OrderType.valueOf(rs.getString("order_type")));
+        order.setOrderModuleId(readLong(rs, "order_module_id"));
+        order.setOrderModuleName(rs.getString("order_module_name"));
         String pricingCode = rs.getString("pricing_code");
         order.setPricingCode(pricingCode == null ? null : PriceCode.valueOf(pricingCode));
         order.setStoreType(StoreType.valueOf(rs.getString("store_type")));
@@ -45,6 +47,7 @@ public class JdbcOrderRepository implements OrderRepository {
         order.setExecutionHours(readInteger(rs, "execution_hours"));
         order.setTotalDays(readInteger(rs, "total_days"));
         order.setQuantity(readInteger(rs, "quantity"));
+        order.setRefundAmount(rs.getBigDecimal("refund_amount"));
         order.setUnitPrice(rs.getBigDecimal("unit_price"));
         order.setTotalAmount(rs.getBigDecimal("total_amount"));
         order.setBalanceBefore(rs.getBigDecimal("balance_before"));
@@ -74,13 +77,13 @@ public class JdbcOrderRepository implements OrderRepository {
             PreparedStatement ps = connection.prepareStatement(
                     """
                             INSERT INTO aso_order
-                            (order_no, customer_id, customer_app_id, source_audit_id, order_type, pricing_code,
+                            (order_no, customer_id, customer_app_id, source_audit_id, order_type, order_module_id, order_module_name, pricing_code,
                              store_type, region_code, app_identifier, app_name, app_icon_url, status,
                              order_start_date, order_end_date, execution_hours, total_days, quantity, unit_price,
                              total_amount, balance_before, balance_after, deducted_transaction_id,
                              refund_transaction_id, reject_reason, confirmed_by_admin_id, confirmed_at,
                              executed_by_admin_id, executed_at, expected_completed_at, completed_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -100,13 +103,19 @@ public class JdbcOrderRepository implements OrderRepository {
     }
 
     @Override
+    public Optional<AsoOrder> findByIdForUpdate(Long id) {
+        return jdbcTemplate.query("SELECT * FROM aso_order WHERE id = ? FOR UPDATE", rowMapper, id).stream().findFirst();
+    }
+
+    @Override
     public AsoOrder update(AsoOrder order) {
         jdbcTemplate.update(
                 """
                         UPDATE aso_order
                         SET status = ?, reject_reason = ?, confirmed_by_admin_id = ?, confirmed_at = ?,
                             executed_by_admin_id = ?, executed_at = ?, expected_completed_at = ?,
-                            completed_at = ?, refund_transaction_id = ?, updated_at = CURRENT_TIMESTAMP
+                            completed_at = ?, refund_transaction_id = ?, refund_amount = ?, quantity = ?, total_amount = ?,
+                            balance_before = ?, balance_after = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                         """,
                 order.getStatus().name(),
@@ -118,6 +127,11 @@ public class JdbcOrderRepository implements OrderRepository {
                 order.getExpectedCompletedAt(),
                 order.getCompletedAt(),
                 order.getRefundTransactionId(),
+                order.getRefundAmount(),
+                order.getQuantity(),
+                order.getTotalAmount(),
+                order.getBalanceBefore(),
+                order.getBalanceAfter(),
                 order.getId()
         );
         return findById(order.getId()).orElse(order);
@@ -128,7 +142,7 @@ public class JdbcOrderRepository implements OrderRepository {
         jdbcTemplate.update(
                 """
                         UPDATE aso_order
-                        SET customer_app_id = ?, order_type = ?, pricing_code = ?, store_type = ?,
+                        SET customer_app_id = ?, order_type = ?, order_module_id = ?, order_module_name = ?, pricing_code = ?, store_type = ?,
                             region_code = ?, app_identifier = ?, app_name = ?, app_icon_url = ?, status = ?,
                             order_start_date = ?, order_end_date = ?, execution_hours = ?, total_days = ?,
                             quantity = ?, unit_price = ?, total_amount = ?, balance_before = ?, balance_after = ?,
@@ -137,6 +151,8 @@ public class JdbcOrderRepository implements OrderRepository {
                         """,
                 order.getCustomerAppId(),
                 order.getOrderType().name(),
+                order.getOrderModuleId(),
+                order.getOrderModuleName(),
                 order.getPricingCode() == null ? null : order.getPricingCode().name(),
                 order.getStoreType().name(),
                 order.getRegionCode(),
@@ -203,19 +219,31 @@ public class JdbcOrderRepository implements OrderRepository {
     }
 
     @Override
-    public List<AsoOrder> findExecutingDueBefore(LocalDateTime now) {
+    public List<AsoOrder> findDueBefore(LocalDateTime now) {
         return jdbcTemplate.query(
                 """
-                        SELECT * FROM aso_order
-                        WHERE status = ? AND expected_completed_at IS NOT NULL AND expected_completed_at <= ?
-                        ORDER BY expected_completed_at ASC, id ASC
+                        SELECT o.* FROM aso_order o
+                        WHERE (
+                            o.status IN (?, ?)
+                            OR (
+                                o.status = ?
+                                AND EXISTS (
+                                    SELECT 1 FROM aso_order_item i
+                                    WHERE i.order_id = o.id AND i.completed_quantity IS NOT NULL
+                                )
+                            )
+                        )
+                        AND o.expected_completed_at IS NOT NULL AND o.expected_completed_at <= ?
+                        ORDER BY o.expected_completed_at ASC, o.id ASC
+                        FOR UPDATE SKIP LOCKED
                         """,
                 rowMapper,
                 OrderStatus.EXECUTING.name(),
+                OrderStatus.PAUSED.name(),
+                OrderStatus.PENDING_EXECUTION.name(),
                 now
         );
     }
-
     private QueryParts buildQuery(String baseSql, List<Object> baseParams, OrderQuery query) {
         StringBuilder sql = new StringBuilder(baseSql);
         List<Object> params = new ArrayList<>(baseParams);
@@ -295,31 +323,33 @@ public class JdbcOrderRepository implements OrderRepository {
         ps.setLong(3, order.getCustomerAppId());
         setNullableLong(ps, 4, order.getSourceAuditId());
         ps.setString(5, order.getOrderType().name());
-        ps.setString(6, order.getPricingCode() == null ? null : order.getPricingCode().name());
-        ps.setString(7, order.getStoreType().name());
-        ps.setString(8, order.getRegionCode());
-        ps.setString(9, order.getAppIdentifier());
-        ps.setString(10, order.getAppName());
-        ps.setString(11, order.getAppIconUrl());
-        ps.setString(12, order.getStatus().name());
-        ps.setObject(13, order.getOrderStartDate());
-        ps.setObject(14, order.getOrderEndDate());
-        setNullableInteger(ps, 15, order.getExecutionHours());
-        setNullableInteger(ps, 16, order.getTotalDays());
-        setNullableInteger(ps, 17, order.getQuantity());
-        ps.setBigDecimal(18, order.getUnitPrice());
-        ps.setBigDecimal(19, order.getTotalAmount());
-        ps.setBigDecimal(20, order.getBalanceBefore());
-        ps.setBigDecimal(21, order.getBalanceAfter());
-        setNullableLong(ps, 22, order.getDeductedTransactionId());
-        setNullableLong(ps, 23, order.getRefundTransactionId());
-        ps.setString(24, order.getRejectReason());
-        setNullableLong(ps, 25, order.getConfirmedByAdminId());
-        ps.setObject(26, order.getConfirmedAt());
-        setNullableLong(ps, 27, order.getExecutedByAdminId());
-        ps.setObject(28, order.getExecutedAt());
-        ps.setObject(29, order.getExpectedCompletedAt());
-        ps.setObject(30, order.getCompletedAt());
+        setNullableLong(ps, 6, order.getOrderModuleId());
+        ps.setString(7, order.getOrderModuleName());
+        ps.setString(8, order.getPricingCode() == null ? null : order.getPricingCode().name());
+        ps.setString(9, order.getStoreType().name());
+        ps.setString(10, order.getRegionCode());
+        ps.setString(11, order.getAppIdentifier());
+        ps.setString(12, order.getAppName());
+        ps.setString(13, order.getAppIconUrl());
+        ps.setString(14, order.getStatus().name());
+        ps.setObject(15, order.getOrderStartDate());
+        ps.setObject(16, order.getOrderEndDate());
+        setNullableInteger(ps, 17, order.getExecutionHours());
+        setNullableInteger(ps, 18, order.getTotalDays());
+        setNullableInteger(ps, 19, order.getQuantity());
+        ps.setBigDecimal(20, order.getUnitPrice());
+        ps.setBigDecimal(21, order.getTotalAmount());
+        ps.setBigDecimal(22, order.getBalanceBefore());
+        ps.setBigDecimal(23, order.getBalanceAfter());
+        setNullableLong(ps, 24, order.getDeductedTransactionId());
+        setNullableLong(ps, 25, order.getRefundTransactionId());
+        ps.setString(26, order.getRejectReason());
+        setNullableLong(ps, 27, order.getConfirmedByAdminId());
+        ps.setObject(28, order.getConfirmedAt());
+        setNullableLong(ps, 29, order.getExecutedByAdminId());
+        ps.setObject(30, order.getExecutedAt());
+        ps.setObject(31, order.getExpectedCompletedAt());
+        ps.setObject(32, order.getCompletedAt());
     }
 
     private static Integer readInteger(java.sql.ResultSet rs, String column) throws java.sql.SQLException {

@@ -43,3 +43,13 @@ export async function updateAdminAccountRoles(id: number, roleIds: number[]) {
   const response = await http.put<ApiResponse<AdminAccount>>(`/admin/admin-accounts/${id}/roles`, { roleIds })
   return response.data.data
 }
+
+export async function getAdminAccountPermissions(id: number) {
+  const response = await http.get<ApiResponse<number[]>>(`/admin/admin-accounts/${id}/permissions`)
+  return response.data.data
+}
+
+export async function updateAdminAccountPermissions(id: number, menuIds: number[]) {
+  const response = await http.put<ApiResponse<number[]>>(`/admin/admin-accounts/${id}/permissions`, { menuIds })
+  return response.data.data
+}

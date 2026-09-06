@@ -36,16 +36,16 @@ class AdminMarketRegionControllerTest {
     @Test
     void adminCanUpdateRegionSwitches() {
         AdminMarketRegionResult region = sampleRegion(false);
-        when(adminMarketRegionService.updateRegion("US", false, true, false, false)).thenReturn(region);
+        when(adminMarketRegionService.updateRegion("US", "US", "美国", "United States", "United States", "Estados Unidos", "Estados Unidos", false, true, false, false, 2)).thenReturn(region);
 
         AdminMarketRegionResult result = controller.update(
                 new AuthenticatedAccount(1L, AccountType.ADMIN.name(), "ADMIN"),
                 "US",
-                new AdminMarketRegionController.UpdateMarketRegionRequest(false, true, false, false)
+                new AdminMarketRegionController.SaveMarketRegionRequest("US", "美国", "United States", "United States", "Estados Unidos", "Estados Unidos", false, true, false, false, 2)
         ).data();
 
         assertThat(result.enabled()).isFalse();
-        verify(adminMarketRegionService).updateRegion("US", false, true, false, false);
+        verify(adminMarketRegionService).updateRegion("US", "US", "美国", "United States", "United States", "Estados Unidos", "Estados Unidos", false, true, false, false, 2);
     }
 
     @Test
@@ -59,6 +59,6 @@ class AdminMarketRegionControllerTest {
     }
 
     private AdminMarketRegionResult sampleRegion(boolean enabled) {
-        return new AdminMarketRegionResult("US", "美国", "United States", enabled, true, true, true, 1);
+        return new AdminMarketRegionResult("US", "美国", "United States", "United States", "Estados Unidos", "Estados Unidos", enabled, true, true, true, 1);
     }
 }

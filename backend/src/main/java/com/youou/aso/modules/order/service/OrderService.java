@@ -14,16 +14,20 @@ import com.youou.aso.modules.appmanagement.repository.MarketRegionRepository;
 import com.youou.aso.modules.order.domain.AsoOrder;
 import com.youou.aso.modules.order.domain.OrderCommentDetail;
 import com.youou.aso.modules.order.domain.OrderItem;
+import com.youou.aso.modules.order.domain.OrderEvent;
 import com.youou.aso.modules.order.domain.OrderStatus;
 import com.youou.aso.modules.order.domain.OrderType;
 import com.youou.aso.modules.order.dto.CreateOrderCommand;
 import com.youou.aso.modules.order.dto.OrderQuery;
 import com.youou.aso.modules.order.repository.OrderCommentDetailRepository;
 import com.youou.aso.modules.order.repository.OrderItemRepository;
+import com.youou.aso.modules.order.repository.OrderEventRepository;
 import com.youou.aso.modules.order.repository.OrderRepository;
 import com.youou.aso.modules.pricing.domain.PriceCode;
 import com.youou.aso.modules.pricing.domain.PricingConfig;
+import com.youou.aso.modules.pricing.domain.OrderModuleConfig;
 import com.youou.aso.modules.pricing.repository.PricingConfigRepository;
+import com.youou.aso.modules.pricing.service.OrderModuleConfigService;
 import com.youou.aso.modules.wallet.service.WalletDebitResult;
 import com.youou.aso.modules.wallet.service.WalletService;
 import org.slf4j.Logger;
@@ -57,86 +61,175 @@ public class OrderService {
     private final CustomerAppRepository customerAppRepository;
     private final MarketRegionRepository marketRegionRepository;
     private final PricingConfigRepository pricingConfigRepository;
+    private final OrderModuleConfigService orderModuleConfigService;
     private final CustomerAccountRepository customerAccountRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final OrderEventRepository orderEventRepository;
     private final OrderCommentDetailRepository orderCommentDetailRepository;
     private final WalletService walletService;
     private final OrderNotificationSender orderNotificationSender;
     private final Clock clock;
+    private final ReviewAttachmentService reviewAttachmentService;
 
     public OrderService(
             CustomerAppRepository customerAppRepository,
             MarketRegionRepository marketRegionRepository,
             PricingConfigRepository pricingConfigRepository,
+            OrderModuleConfigService orderModuleConfigService,
             CustomerAccountRepository customerAccountRepository,
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
+            OrderEventRepository orderEventRepository,
             OrderCommentDetailRepository orderCommentDetailRepository,
             WalletService walletService,
             OrderNotificationSender orderNotificationSender,
-            Clock clock
+            Clock clock,
+            ReviewAttachmentService reviewAttachmentService
     ) {
         this.customerAppRepository = customerAppRepository;
         this.marketRegionRepository = marketRegionRepository;
         this.pricingConfigRepository = pricingConfigRepository;
+        this.orderModuleConfigService = orderModuleConfigService;
         this.customerAccountRepository = customerAccountRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.orderEventRepository = orderEventRepository;
         this.orderCommentDetailRepository = orderCommentDetailRepository;
         this.walletService = walletService;
         this.orderNotificationSender = orderNotificationSender;
         this.clock = clock;
+        this.reviewAttachmentService = reviewAttachmentService;
     }
 
     @Transactional
     public AsoOrder createCustomerOrder(Long customerId, CreateOrderCommand command) {
+        return createOrder(customerId, command, OrderStatus.PENDING_CONFIRM, null);
+    }
+
+    @Transactional
+    public AsoOrder createAdminOrderForCustomer(Long customerId, Long adminId, CreateOrderCommand command) {
+        if (adminId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        return createOrder(customerId, command, OrderStatus.PENDING_EXECUTION, adminId);
+    }
+
+    private AsoOrder createOrder(Long customerId, CreateOrderCommand command, OrderStatus paidStatus, Long confirmedByAdminId) {
         validateCreateCommand(customerId, command);
         CustomerApp app = loadActiveCustomerApp(customerId, command.customerAppId());
         PriceSnapshot priceSnapshot = calculatePrice(command, app);
         AsoOrder order = buildOrder(customerId, app, command, priceSnapshot);
         order.setOrderNo(generateOrderNo());
-        applyPaymentStatus(order, priceSnapshot, "ORDER_DEDUCT:" + command.orderType().name());
+        applyPaymentStatus(order, priceSnapshot, "ORDER_DEDUCT:" + command.orderType().name(), paidStatus, confirmedByAdminId);
         AsoOrder saved = orderRepository.save(order);
+        walletService.linkTransactionToOrder(saved.getDeductedTransactionId(), saved.getId());
         orderItemRepository.saveAll(saved.getId(), priceSnapshot.items());
         orderCommentDetailRepository.saveAll(saved.getId(), priceSnapshot.commentDetails());
         saved.setItems(priceSnapshot.items());
         saved.setCommentDetails(priceSnapshot.commentDetails());
+        reviewAttachmentService.bind(saved, command);
         notifyOrderCreated(saved);
         return saved;
     }
 
     @Transactional
-    public AsoOrder resubmitPendingPaymentOrder(Long customerId, Long orderId, CreateOrderCommand command) {
+    public AsoOrder resubmitEditableOrder(Long customerId, Long orderId, CreateOrderCommand command) {
         validateCreateCommand(customerId, command);
         if (orderId == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        AsoOrder order = orderRepository.findById(orderId)
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        if (!OrderStatus.PENDING_PAYMENT.equals(order.getStatus()) || order.getSourceAuditId() != null) {
+        OrderStatus originalStatus = order.getStatus();
+        if ((!OrderStatus.PENDING_PAYMENT.equals(originalStatus) && !OrderStatus.PENDING_CONFIRM.equals(originalStatus))
+                || order.getSourceAuditId() != null) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
 
         CustomerApp app = loadActiveCustomerApp(customerId, command.customerAppId());
         PriceSnapshot priceSnapshot = calculatePrice(command, app);
+        BigDecimal oldTotal = order.getTotalAmount() == null ? BigDecimal.ZERO : order.getTotalAmount();
+        int oldQuantity = order.getQuantity() == null ? 0 : order.getQuantity();
         copyOrderDraft(order, app, command, priceSnapshot);
-        applyPaymentStatus(order, priceSnapshot, "ORDER_DEDUCT_RETRY:" + order.getOrderNo());
+        if (OrderStatus.PENDING_PAYMENT.equals(originalStatus)) {
+            applyPaymentStatus(order, priceSnapshot, "ORDER_DEDUCT_RETRY:" + order.getOrderNo(), OrderStatus.PENDING_CONFIRM, null);
+        } else {
+            BigDecimal difference = priceSnapshot.totalAmount().subtract(oldTotal);
+            if (difference.signum() > 0) {
+                WalletDebitResult debit = walletService.debitForOrder(customerId, difference, "ORDER_EDIT_INCREASE:" + order.getOrderNo());
+                order.setBalanceBefore(debit.balanceBefore());
+                order.setBalanceAfter(debit.balanceAfter());
+                walletService.linkTransactionToOrder(debit.transactionId(), order.getId());
+            } else if (difference.signum() < 0) {
+                WalletDebitResult refund = walletService.refundForOrder(customerId, difference.abs(), "ORDER_EDIT_DECREASE:" + order.getOrderNo());
+                order.setBalanceBefore(refund.balanceBefore());
+                order.setBalanceAfter(refund.balanceAfter());
+                walletService.linkTransactionToOrder(refund.transactionId(), order.getId());
+            }
+            order.setStatus(OrderStatus.PENDING_CONFIRM);
+        }
         AsoOrder updated = orderRepository.updatePaymentDraft(order);
+        if (OrderStatus.PENDING_PAYMENT.equals(originalStatus)) {
+            walletService.linkTransactionToOrder(updated.getDeductedTransactionId(), updated.getId());
+        }
+        reviewAttachmentService.bind(updated, command);
         orderItemRepository.deleteByOrderId(updated.getId());
         orderCommentDetailRepository.deleteByOrderId(updated.getId());
         orderItemRepository.saveAll(updated.getId(), priceSnapshot.items());
         orderCommentDetailRepository.saveAll(updated.getId(), priceSnapshot.commentDetails());
         updated.setItems(priceSnapshot.items());
         updated.setCommentDetails(priceSnapshot.commentDetails());
-        notifyOrderCreated(updated);
+        if (OrderStatus.PENDING_PAYMENT.equals(originalStatus)) {
+            notifyOrderCreated(updated);
+        } else {
+            recordEvent(updated, "UPDATED", null, oldQuantity, updated.getQuantity(), 0, 0, oldTotal, updated.getTotalAmount());
+        }
         return updated;
+    }
+
+    /** Kept for binary compatibility with callers compiled against the previous name. */
+    public AsoOrder resubmitPendingPaymentOrder(Long customerId, Long orderId, CreateOrderCommand command) {
+        return resubmitEditableOrder(customerId, orderId, command);
+    }
+
+    @Transactional
+    public AsoOrder payPendingPaymentOrder(Long customerId, Long orderId) {
+        if (customerId == null || orderId == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
+                .filter(candidate -> customerId.equals(candidate.getCustomerId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!OrderStatus.PENDING_PAYMENT.equals(order.getStatus()) || order.getSourceAuditId() != null) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        }
+
+        OrderStatus paidStatus = order.getConfirmedByAdminId() == null
+                ? OrderStatus.PENDING_CONFIRM
+                : OrderStatus.PENDING_EXECUTION;
+        PriceSnapshot currentPrice = new PriceSnapshot(
+                order.getPricingCode(),
+                order.getUnitPrice(),
+                order.getQuantity() == null ? 0 : order.getQuantity(),
+                order.getTotalAmount(),
+                order.getItems() == null ? List.of() : order.getItems(),
+                order.getRegionCode(),
+                order.getCommentDetails() == null ? List.of() : order.getCommentDetails()
+        );
+        applyPaymentStatus(order, currentPrice, "ORDER_DEDUCT_RETRY:" + order.getOrderNo(), paidStatus, order.getConfirmedByAdminId());
+        AsoOrder updated = orderRepository.update(order);
+        walletService.linkTransactionToOrder(updated.getDeductedTransactionId(), updated.getId());
+        if (!OrderStatus.PENDING_PAYMENT.equals(updated.getStatus())) {
+            notifyOrderCreated(updated);
+        }
+        return attachDetails(attachItems(updated));
     }
 
     @Transactional
     public AsoOrder confirmOrder(Long orderId, Long adminId) {
-        AsoOrder order = orderRepository.findById(orderId)
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!OrderStatus.PENDING_CONFIRM.equals(order.getStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
@@ -222,7 +315,7 @@ public class OrderService {
         AsoOrder order = orderRepository.findById(orderId)
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        return attachDetails(attachItems(order));
+        return attachEvents(attachDetails(attachItems(order)));
     }
 
     @Transactional
@@ -233,7 +326,7 @@ public class OrderService {
         completeExpiredExecutingOrders();
         AsoOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-        return attachCustomer(attachDetails(attachItems(order)));
+        return attachCustomer(attachEvents(attachDetails(attachItems(order))));
     }
 
     @Transactional
@@ -274,7 +367,9 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         order.setStatus(OrderStatus.PAUSED);
-        return orderRepository.update(order);
+        AsoOrder updated = orderRepository.update(order);
+        recordEvent(updated, "PAUSED", adminId, null, null, null, null, null, null);
+        return attachItems(updated);
     }
 
     @Transactional
@@ -293,7 +388,9 @@ public class OrderService {
         return orders.stream()
                 .map(order -> {
                     order.setStatus(OrderStatus.PAUSED);
-                    return orderRepository.update(order);
+                    AsoOrder updated = orderRepository.update(order);
+                    recordEvent(updated, "PAUSED", adminId, null, null, null, null, null, null);
+                    return updated;
                 })
                 .toList();
     }
@@ -306,9 +403,77 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         order.setStatus(OrderStatus.EXECUTING);
-        return orderRepository.update(order);
+        AsoOrder updated = orderRepository.update(order);
+        recordEvent(updated, "RESUMED", adminId, null, null, null, null, null, null);
+        return updated;
     }
 
+    @Transactional
+    public AsoOrder updatePausedOrder(Long orderId, Long adminId, List<PausedItemEdit> edits) {
+        AsoOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!OrderStatus.PAUSED.equals(order.getStatus())) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        }
+        attachItems(order);
+        if (edits == null || edits.size() != order.getItems().size()) {
+            throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        }
+        Map<Long, PausedItemEdit> editByItemId;
+        try {
+            editByItemId = edits.stream().collect(java.util.stream.Collectors.toMap(PausedItemEdit::itemId, edit -> edit));
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        }
+        Integer oldQuantity = order.getQuantity();
+        BigDecimal oldTotal = order.getTotalAmount() == null ? BigDecimal.ZERO : order.getTotalAmount();
+        Integer oldCompleted = order.getItems().stream()
+                .map(item -> item.getCompletedQuantity() == null ? 0 : item.getCompletedQuantity())
+                .reduce(0, Integer::sum);
+        for (OrderItem item : order.getItems()) {
+            PausedItemEdit edit = editByItemId.get(item.getId());
+            if (edit == null || edit.quantity() == null || edit.quantity() < 1
+                    || edit.completedQuantity() == null || edit.completedQuantity() < 0
+                    || edit.completedQuantity() > edit.quantity()) {
+                throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+            }
+            item.setQuantity(edit.quantity());
+            item.setCompletedQuantity(edit.completedQuantity());
+            item.setAmount(item.getUnitPrice().multiply(BigDecimal.valueOf(edit.quantity()))
+                    .setScale(2, RoundingMode.HALF_UP));
+        }
+        BigDecimal newTotal = sumAmount(order.getItems()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal difference = newTotal.subtract(oldTotal).setScale(2, RoundingMode.HALF_UP);
+        if (difference.signum() > 0) {
+            WalletDebitResult debit = walletService.debitForOrder(
+                    order.getCustomerId(),
+                    difference,
+                    "ORDER_QUANTITY_INCREASE:" + order.getOrderNo()
+            );
+            order.setBalanceBefore(debit.balanceBefore());
+            order.setBalanceAfter(debit.balanceAfter());
+            walletService.linkTransactionToOrder(debit.transactionId(), order.getId());
+        } else if (difference.signum() < 0) {
+            WalletDebitResult refund = walletService.refundForOrder(
+                    order.getCustomerId(),
+                    difference.abs(),
+                    "ORDER_QUANTITY_DECREASE:" + order.getOrderNo()
+            );
+            order.setBalanceBefore(refund.balanceBefore());
+            order.setBalanceAfter(refund.balanceAfter());
+            walletService.linkTransactionToOrder(refund.transactionId(), order.getId());
+        }
+        order.setQuantity(order.getItems().stream().map(OrderItem::getQuantity).reduce(0, Integer::sum));
+        order.setTotalAmount(newTotal);
+        orderItemRepository.updateQuantitiesAndProgress(order.getItems());
+        AsoOrder updated = orderRepository.update(order);
+        Integer newCompleted = updated.getItems().stream()
+                .map(item -> item.getCompletedQuantity() == null ? 0 : item.getCompletedQuantity())
+                .reduce(0, Integer::sum);
+        recordEvent(updated, "UPDATED", adminId, oldQuantity, updated.getQuantity(),
+                oldCompleted, newCompleted, oldTotal, newTotal);
+        return attachItems(updated);
+    }
     @Transactional
     public AsoOrder cancelOrder(Long orderId, Long adminId, String reason) {
         AsoOrder order = orderRepository.findById(orderId)
@@ -316,6 +481,12 @@ public class OrderService {
         if (!OrderStatus.PENDING_CONFIRM.equals(order.getStatus())
                 && !OrderStatus.PENDING_EXECUTION.equals(order.getStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        }
+        if (OrderStatus.PENDING_EXECUTION.equals(order.getStatus())) {
+            attachItems(order);
+            if (hasRecordedProgress(order)) {
+                throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+            }
         }
         if (order.getRefundTransactionId() != null) {
             throw new BusinessException(ErrorCode.ORDER_ALREADY_REFUNDED);
@@ -328,6 +499,7 @@ public class OrderService {
                     "ORDER_REFUND:" + order.getOrderNo()
             );
             order.setRefundTransactionId(refund.transactionId());
+            walletService.linkTransactionToOrder(refund.transactionId(), order.getId());
         }
         order.setStatus(OrderStatus.CANCELLED);
         order.setRejectReason(normalizeCancelReason(reason));
@@ -366,6 +538,9 @@ public class OrderService {
                 : priceSnapshot.orderRegionCode();
         order.setCustomerAppId(app.getId());
         order.setOrderType(command.orderType());
+        OrderModuleConfig module = resolveOrderModule(command);
+        order.setOrderModuleId(module == null ? null : module.id());
+        order.setOrderModuleName(module == null ? null : module.moduleName());
         order.setPricingCode(priceSnapshot.primaryPriceCode());
         order.setStoreType(app.getStoreType());
         order.setRegionCode(regionCode);
@@ -383,13 +558,29 @@ public class OrderService {
     }
 
     private void applyPaymentStatus(AsoOrder order, PriceSnapshot priceSnapshot, String remark) {
+        applyPaymentStatus(order, priceSnapshot, remark, OrderStatus.PENDING_CONFIRM, null);
+    }
+
+    private void applyPaymentStatus(
+            AsoOrder order,
+            PriceSnapshot priceSnapshot,
+            String remark,
+            OrderStatus paidStatus,
+            Long confirmedByAdminId
+    ) {
+        if (OrderStatus.PENDING_EXECUTION.equals(paidStatus)) {
+            order.setConfirmedByAdminId(confirmedByAdminId);
+        }
         try {
             WalletDebitResult debit = walletService.debitForOrder(
                     order.getCustomerId(),
                     priceSnapshot.totalAmount(),
                     remark
             );
-            order.setStatus(OrderStatus.PENDING_CONFIRM);
+            order.setStatus(paidStatus);
+            if (OrderStatus.PENDING_EXECUTION.equals(paidStatus)) {
+                order.setConfirmedAt(now());
+            }
             order.setBalanceBefore(debit.balanceBefore());
             order.setBalanceAfter(debit.balanceAfter());
             order.setDeductedTransactionId(debit.transactionId());
@@ -406,13 +597,20 @@ public class OrderService {
     }
 
     private PriceSnapshot calculatePrice(CreateOrderCommand command, CustomerApp app) {
+        OrderModuleConfig module = resolveOrderModule(command);
         return switch (command.orderType()) {
-            case KEYWORD_INSTALL -> calculateKeywordInstall(command, app);
-            case DOWNLOAD -> calculateDownload(command, app);
-            case RATING -> calculateRating(command, app);
-            case REVIEW -> calculateReview(command, app);
-            case RANK_GUARANTEE, KEYWORD_COVERAGE -> throw new BusinessException(ErrorCode.SPECIAL_AUDIT_NOT_APPROVED);
+            case KEYWORD_INSTALL -> calculateKeywordInstall(command, app, module);
+            case DOWNLOAD -> calculateDownload(command, app, module);
+            case RATING -> calculateRating(command, app, module);
+            case REVIEW -> calculateReview(command, app, module);
+            case RANK_GUARANTEE, CHART_RANK_GUARANTEE, KEYWORD_COVERAGE -> throw new BusinessException(ErrorCode.SPECIAL_AUDIT_NOT_APPROVED);
         };
+    }
+
+    private OrderModuleConfig resolveOrderModule(CreateOrderCommand command) {
+        if (command.orderModuleId() == null) return null;
+        if (orderModuleConfigService == null) throw new BusinessException(ErrorCode.PRICE_INVALID);
+        return orderModuleConfigService.requireEnabled(command.orderModuleId(), command.orderType());
     }
 
     private String resolveLinkedRegion(CustomerApp app, String requestedRegionCode) {
@@ -452,8 +650,16 @@ public class OrderService {
     @Transactional
     public int completeExpiredExecutingOrders() {
         LocalDateTime now = now();
-        List<AsoOrder> dueOrders = orderRepository.findExecutingDueBefore(now);
+        List<AsoOrder> dueOrders = orderRepository.findDueBefore(now);
         dueOrders.forEach(order -> {
+            attachItems(order);
+            if (OrderStatus.PAUSED.equals(order.getStatus())
+                    || (OrderStatus.PENDING_EXECUTION.equals(order.getStatus()) && hasRecordedProgress(order))) {
+                refundUnfinishedQuantity(order);
+            } else {
+                order.getItems().forEach(item -> item.setCompletedQuantity(item.getQuantity()));
+                orderItemRepository.updateCompletedQuantities(order.getItems());
+            }
             order.setStatus(OrderStatus.COMPLETED);
             order.setCompletedAt(now);
             orderRepository.update(order);
@@ -461,22 +667,52 @@ public class OrderService {
         return dueOrders.size();
     }
 
-    private PriceSnapshot calculateKeywordInstall(CreateOrderCommand command, CustomerApp app) {
+    private boolean hasRecordedProgress(AsoOrder order) {
+        return order.getItems().stream().anyMatch(item -> item.getCompletedQuantity() != null);
+    }
+
+    private void refundUnfinishedQuantity(AsoOrder order) {
+        if (order.getRefundTransactionId() != null) {
+            return;
+        }
+        BigDecimal refundAmount = order.getItems().stream()
+                .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(
+                        item.getQuantity() - (item.getCompletedQuantity() == null ? 0 : item.getCompletedQuantity()))))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        order.setRefundAmount(refundAmount);
+        if (refundAmount.signum() == 0) {
+            return;
+        }
+        WalletDebitResult refund = walletService.refundForOrder(order.getCustomerId(), refundAmount,
+                "ORDER_REFUND:" + order.getOrderNo());
+        order.setRefundTransactionId(refund.transactionId());
+        walletService.linkTransactionToOrder(refund.transactionId(), order.getId());
+    }
+
+    public record PausedItemEdit(Long itemId, Integer quantity, Integer completedQuantity) {
+    }
+
+    private PriceSnapshot calculateKeywordInstall(CreateOrderCommand command, CustomerApp app, OrderModuleConfig module) {
         Map<KeywordRegionKey, Integer> keywordQuantities = keywordQuantities(command, app);
         if (keywordQuantities.isEmpty()) {
             throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
         }
+        validateRegionCombination(keywordQuantities.keySet().stream().map(KeywordRegionKey::regionCode).toList());
         PricingConfig price = enabledPrice(PriceCode.KEYWORD_INSTALL);
         List<OrderItem> items = keywordQuantities.entrySet().stream()
-                .map(entry -> item(
-                        PriceCode.KEYWORD_INSTALL.name(),
-                        entry.getKey().keyword(),
-                        entry.getKey().regionCode(),
-                        entry.getValue(),
-                        price.getUnitPrice(),
-                        price.getUnitPrice().multiply(BigDecimal.valueOf(entry.getValue())).setScale(2, RoundingMode.HALF_UP),
-                        null
-                ))
+                .map(entry -> {
+                    BigDecimal itemUnitPrice = unitPriceForRegion(price, entry.getKey().regionCode(), module);
+                    return item(
+                            PriceCode.KEYWORD_INSTALL.name(),
+                            entry.getKey().keyword(),
+                            entry.getKey().regionCode(),
+                            entry.getValue(),
+                            itemUnitPrice,
+                            itemUnitPrice.multiply(BigDecimal.valueOf(entry.getValue())).setScale(2, RoundingMode.HALF_UP),
+                            null
+                    );
+                })
                 .toList();
         String orderRegionCode = keywordQuantities.keySet().stream()
                 .map(KeywordRegionKey::regionCode)
@@ -487,7 +723,7 @@ public class OrderService {
                 : keywordQuantities.keySet().iterator().next().regionCode();
         return new PriceSnapshot(
                 PriceCode.KEYWORD_INSTALL,
-                price.getUnitPrice(),
+                items.stream().map(OrderItem::getUnitPrice).distinct().limit(2).count() == 1 ? items.get(0).getUnitPrice() : null,
                 keywordQuantities.values().stream().mapToInt(Integer::intValue).sum(),
                 sumAmount(items),
                 items,
@@ -525,7 +761,7 @@ public class OrderService {
         return result;
     }
 
-    private PriceSnapshot calculateDownload(CreateOrderCommand command, CustomerApp app) {
+    private PriceSnapshot calculateDownload(CreateOrderCommand command, CustomerApp app, OrderModuleConfig module) {
         PricingConfig price = enabledPrice(PriceCode.DOWNLOAD);
         if (hasRegionItems(command)) {
             List<OrderItem> items = command.regionItems().stream()
@@ -536,13 +772,15 @@ public class OrderService {
                             return null;
                         }
                         int quantity = totalDays(command.startDate(), command.endDate()) * dailyDownloadCount;
+                        String regionCode = resolveLinkedRegion(app, item.regionCode());
+                        BigDecimal unitPrice = unitPriceForRegion(price, regionCode, module);
                         return item(
                                 PriceCode.DOWNLOAD.name(),
                                 null,
-                                resolveLinkedRegion(app, item.regionCode()),
+                                regionCode,
                                 quantity,
-                                price.getUnitPrice(),
-                                price.getUnitPrice().multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP),
+                                unitPrice,
+                                unitPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP),
                                 "{\"dailyDownloadCount\":" + dailyDownloadCount + "}"
                         );
                     })
@@ -553,7 +791,7 @@ public class OrderService {
             }
             return new PriceSnapshot(
                     PriceCode.DOWNLOAD,
-                    price.getUnitPrice(),
+                    module == null ? price.getUnitPrice() : module.unitPrice(),
                     items.stream().mapToInt(OrderItem::getQuantity).sum(),
                     sumAmount(items),
                     items,
@@ -565,18 +803,20 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
         }
         int quantity = totalDays(command.startDate(), command.endDate()) * command.dailyDownloadCount();
+        String downloadRegionCode = resolveLinkedRegion(app, command.regionCode());
+        BigDecimal downloadUnitPrice = unitPriceForRegion(price, downloadRegionCode, module);
         OrderItem item = item(
                 PriceCode.DOWNLOAD.name(),
                 null,
-                resolveLinkedRegion(app, command.regionCode()),
+                downloadRegionCode,
                 quantity,
-                price.getUnitPrice(),
-                price.getUnitPrice().multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP),
+                downloadUnitPrice,
+                downloadUnitPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP),
                 "{\"dailyDownloadCount\":" + command.dailyDownloadCount() + "}"
         );
         return new PriceSnapshot(
                 PriceCode.DOWNLOAD,
-                price.getUnitPrice(),
+                module == null ? price.getUnitPrice() : module.unitPrice(),
                 quantity,
                 item.getAmount(),
                 List.of(item),
@@ -585,7 +825,7 @@ public class OrderService {
         );
     }
 
-    private PriceSnapshot calculateRating(CreateOrderCommand command, CustomerApp app) {
+    private PriceSnapshot calculateRating(CreateOrderCommand command, CustomerApp app, OrderModuleConfig module) {
         PricingConfig rating5Price = enabledPrice(PriceCode.RATING_5);
         PricingConfig rating4Price = enabledPrice(PriceCode.RATING_4);
         int days = totalDays(command.startDate(), command.endDate());
@@ -599,7 +839,8 @@ public class OrderService {
                             rating4Price,
                             PriceCode.RATING_5,
                             PriceCode.RATING_4,
-                            resolveLinkedRegion(app, item.regionCode())
+                            resolveOrderRegion(app, item.regionCode(), OrderType.RATING),
+                            module
                     ).stream())
                     .toList();
             if (items.isEmpty()) {
@@ -620,17 +861,18 @@ public class OrderService {
         if (rating5 + rating4 <= 0) {
             throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
         }
-        String regionCode = resolveLinkedRegion(app, command.regionCode());
-        List<OrderItem> items = ratingItems(days * rating5, days * rating4, rating5Price, rating4Price, PriceCode.RATING_5, PriceCode.RATING_4, regionCode);
+        String regionCode = resolveOrderRegion(app, command.regionCode(), OrderType.RATING);
+        List<OrderItem> items = ratingItems(days * rating5, days * rating4, rating5Price, rating4Price, PriceCode.RATING_5, PriceCode.RATING_4, regionCode, module);
         BigDecimal amount = sumAmount(items);
         return new PriceSnapshot(PriceCode.RATING_5, null, days * (rating5 + rating4), amount, items, regionCode, List.of());
     }
 
-    private PriceSnapshot calculateReview(CreateOrderCommand command, CustomerApp app) {
+    private PriceSnapshot calculateReview(CreateOrderCommand command, CustomerApp app, OrderModuleConfig module) {
         PricingConfig review5Price = enabledPrice(PriceCode.REVIEW_5);
         PricingConfig review4Price = enabledPrice(PriceCode.REVIEW_4);
         if (command.reviewDetails() != null && !command.reviewDetails().isEmpty()) {
             List<OrderCommentDetail> details = commentDetails(command, app);
+            validateRegionCombination(details.stream().map(OrderCommentDetail::getRegionCode).toList());
             int review5 = (int) details.stream().filter(detail -> detail.getStarLevel() == 5).count();
             int review4 = (int) details.stream().filter(detail -> detail.getStarLevel() == 4).count();
             if (review5 + review4 <= 0) {
@@ -649,13 +891,14 @@ public class OrderService {
                         int count = entry.getValue().size();
                         PriceCode code = first.getStarLevel() == 5 ? PriceCode.REVIEW_5 : PriceCode.REVIEW_4;
                         PricingConfig price = first.getStarLevel() == 5 ? review5Price : review4Price;
+                        BigDecimal unitPrice = unitPriceForRegion(price, first.getRegionCode(), module);
                         return item(
                                 code.name(),
                                 null,
                                 first.getRegionCode(),
                                 count,
-                                price.getUnitPrice(),
-                                price.getUnitPrice().multiply(BigDecimal.valueOf(count)).setScale(2, RoundingMode.HALF_UP),
+                                unitPrice,
+                                unitPrice.multiply(BigDecimal.valueOf(count)).setScale(2, RoundingMode.HALF_UP),
                                 null
                         );
                     })
@@ -680,7 +923,8 @@ public class OrderService {
                             review4Price,
                             PriceCode.REVIEW_5,
                             PriceCode.REVIEW_4,
-                            resolveLinkedRegion(app, item.regionCode())
+                            resolveOrderRegion(app, item.regionCode(), OrderType.REVIEW),
+                            module
                     ).stream())
                     .toList();
             if (items.isEmpty()) {
@@ -701,8 +945,8 @@ public class OrderService {
         if (review5 + review4 <= 0) {
             throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
         }
-        String regionCode = resolveLinkedRegion(app, command.regionCode());
-        List<OrderItem> items = ratingItems(review5, review4, review5Price, review4Price, PriceCode.REVIEW_5, PriceCode.REVIEW_4, regionCode);
+        String regionCode = resolveOrderRegion(app, command.regionCode(), OrderType.REVIEW);
+        List<OrderItem> items = ratingItems(review5, review4, review5Price, review4Price, PriceCode.REVIEW_5, PriceCode.REVIEW_4, regionCode, module);
         BigDecimal amount = sumAmount(items);
         return new PriceSnapshot(PriceCode.REVIEW_5, null, review5 + review4, amount, items, regionCode, List.of());
     }
@@ -718,7 +962,7 @@ public class OrderService {
                         throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
                     }
                     OrderCommentDetail result = new OrderCommentDetail();
-                    result.setRegionCode(resolveLinkedRegion(app, detail.regionCode()));
+                    result.setRegionCode(resolveOrderRegion(app, detail.regionCode(), OrderType.REVIEW));
                     result.setStarLevel(starLevel);
                     result.setCommentTitle(title);
                     result.setCommentContent(content);
@@ -734,28 +978,31 @@ public class OrderService {
             PricingConfig price4,
             PriceCode code5,
             PriceCode code4,
-            String regionCode
+            String regionCode,
+            OrderModuleConfig module
     ) {
         java.util.ArrayList<OrderItem> items = new java.util.ArrayList<>();
         if (count5 > 0) {
+            BigDecimal effectivePrice5 = unitPriceForRegion(price5, regionCode, module);
             items.add(item(
                     code5.name(),
                     null,
                     regionCode,
                     count5,
-                    price5.getUnitPrice(),
-                    price5.getUnitPrice().multiply(BigDecimal.valueOf(count5)).setScale(2, RoundingMode.HALF_UP),
+                    effectivePrice5,
+                    effectivePrice5.multiply(BigDecimal.valueOf(count5)).setScale(2, RoundingMode.HALF_UP),
                     null
             ));
         }
         if (count4 > 0) {
+            BigDecimal effectivePrice4 = unitPriceForRegion(price4, regionCode, module);
             items.add(item(
                     code4.name(),
                     null,
                     regionCode,
                     count4,
-                    price4.getUnitPrice(),
-                    price4.getUnitPrice().multiply(BigDecimal.valueOf(count4)).setScale(2, RoundingMode.HALF_UP),
+                    effectivePrice4,
+                    effectivePrice4.multiply(BigDecimal.valueOf(count4)).setScale(2, RoundingMode.HALF_UP),
                     null
             ));
         }
@@ -773,6 +1020,7 @@ public class OrderService {
                 .distinct()
                 .limit(2)
                 .toList();
+        validateRegionCombination(regionCodes);
         if (regionCodes.size() > 1) {
             return "MULTI";
         }
@@ -822,18 +1070,43 @@ public class OrderService {
         if (orders.isEmpty()) {
             return orders;
         }
-        List<Long> orderIds = orders.stream().map(AsoOrder::getId).toList();
-        Map<Long, List<OrderCommentDetail>> detailMap = orderCommentDetailRepository.findByOrderIds(orderIds);
-        orders.forEach(order -> order.setCommentDetails(detailMap.getOrDefault(order.getId(), List.of())));
+        orders.forEach(order -> order.setCommentDetails(List.of()));
         return orders;
     }
 
     private AsoOrder attachDetails(AsoOrder order) {
-        Map<Long, List<OrderCommentDetail>> detailMap = orderCommentDetailRepository.findByOrderIds(List.of(order.getId()));
-        order.setCommentDetails(detailMap.getOrDefault(order.getId(), List.of()));
+        order.setCommentDetails(List.of());
         return order;
     }
 
+    private AsoOrder attachEvents(AsoOrder order) {
+        order.setEvents(orderEventRepository.findByOrderId(order.getId()));
+        return order;
+    }
+
+    private void recordEvent(
+            AsoOrder order,
+            String eventType,
+            Long adminId,
+            Integer quantityBefore,
+            Integer quantityAfter,
+            Integer completedBefore,
+            Integer completedAfter,
+            BigDecimal amountBefore,
+            BigDecimal amountAfter
+    ) {
+        OrderEvent event = new OrderEvent();
+        event.setOrderId(order.getId());
+        event.setEventType(eventType);
+        event.setQuantityBefore(quantityBefore);
+        event.setQuantityAfter(quantityAfter);
+        event.setCompletedBefore(completedBefore);
+        event.setCompletedAfter(completedAfter);
+        event.setAmountBefore(amountBefore);
+        event.setAmountAfter(amountAfter);
+        event.setCreatedByAdminId(adminId);
+        orderEventRepository.save(event);
+    }
     private List<AsoOrder> attachCustomers(List<AsoOrder> orders) {
         if (orders.isEmpty()) {
             return orders;
@@ -893,6 +1166,52 @@ public class OrderService {
         order.setCustomerEmail(customer.getEmail());
     }
 
+    private BigDecimal unitPriceForRegion(PricingConfig price, String regionCode) {
+        ensureRegionAllowed(orderTypeFor(price.getCode()), regionCode);
+        return pricingConfigRepository.findRegionPrice(price.getCode(), regionCode)
+                .orElseGet(() -> "CN".equalsIgnoreCase(regionCode) ? price.getChinaUnitPrice() : price.getUnitPrice());
+    }
+
+    private BigDecimal unitPriceForRegion(PricingConfig price, String regionCode, OrderModuleConfig module) {
+        ensureRegionAllowed(orderTypeFor(price.getCode()), regionCode);
+        return pricingConfigRepository.findRegionPrice(price.getCode(), regionCode)
+                .orElseGet(() -> module == null ? unitPriceForRegion(price, regionCode) : module.priceFor(regionCode));
+    }
+
+    private void ensureRegionAllowed(OrderType orderType, String regionCode) {
+        if (pricingConfigRepository.hasRegionConfiguration(orderType)
+                && !pricingConfigRepository.findAllowedRegionCodes(orderType).contains(regionCode.toUpperCase())) {
+            throw new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+        }
+    }
+
+    private OrderType orderTypeFor(PriceCode code) {
+        return switch (code) {
+            case KEYWORD_INSTALL -> OrderType.KEYWORD_INSTALL;
+            case DOWNLOAD -> OrderType.DOWNLOAD;
+            case RATING_5, RATING_4 -> OrderType.RATING;
+            case REVIEW_5, REVIEW_4 -> OrderType.REVIEW;
+        };
+    }
+
+    private String resolveOrderRegion(CustomerApp app, String requestedRegionCode, OrderType orderType) {
+        String regionCode = resolveLinkedRegion(app, requestedRegionCode);
+        if ((OrderType.RATING.equals(orderType) || OrderType.REVIEW.equals(orderType))
+                && "CN".equalsIgnoreCase(regionCode)) {
+            throw new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+        }
+        return regionCode;
+    }
+
+    private void validateRegionCombination(java.util.Collection<String> regionCodes) {
+        java.util.Set<String> distinct = regionCodes.stream()
+                .filter(code -> code != null && !code.isBlank())
+                .map(code -> code.trim().toUpperCase())
+                .collect(java.util.stream.Collectors.toSet());
+        if (distinct.contains("CN") && distinct.size() > 1) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+    }
     private PricingConfig enabledPrice(PriceCode code) {
         PricingConfig price = pricingConfigRepository.findByCode(code)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRICE_NOT_CONFIGURED));

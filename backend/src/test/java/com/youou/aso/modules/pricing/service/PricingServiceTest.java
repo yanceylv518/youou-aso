@@ -41,7 +41,7 @@ class PricingServiceTest {
     @Test
     void updatePricingPersistsNonNegativePrices() {
         pricingService.updatePricing(List.of(
-                new UpdatePricingCommand(PriceCode.KEYWORD_INSTALL, new BigDecimal("1.20")),
+                new UpdatePricingCommand(PriceCode.KEYWORD_INSTALL, new BigDecimal("1.20"), new BigDecimal("1.80")),
                 new UpdatePricingCommand(PriceCode.DOWNLOAD, new BigDecimal("0.50")),
                 new UpdatePricingCommand(PriceCode.RATING_5, new BigDecimal("2.00")),
                 new UpdatePricingCommand(PriceCode.RATING_4, new BigDecimal("1.50")),
@@ -51,6 +51,8 @@ class PricingServiceTest {
 
         assertThat(repository.findByCode(PriceCode.KEYWORD_INSTALL).orElseThrow().getUnitPrice())
                 .isEqualByComparingTo("1.20");
+        assertThat(repository.findByCode(PriceCode.KEYWORD_INSTALL).orElseThrow().getChinaUnitPrice())
+                .isEqualByComparingTo("1.80");
         assertThat(repository.findByCode(PriceCode.REVIEW_4).orElseThrow().getUnitPrice())
                 .isEqualByComparingTo("2.50");
     }

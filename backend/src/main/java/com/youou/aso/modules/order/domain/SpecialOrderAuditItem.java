@@ -1,14 +1,18 @@
 package com.youou.aso.modules.order.domain;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 public class SpecialOrderAuditItem {
     private Long id;
     private Long auditId;
     private String regionCode;
     private String keyword;
+    private String chartType;
     private Integer targetRank;
     private String coverageNote;
+    private BigDecimal unitPrice;
+    private Integer executionDays;
     private LocalDateTime createdAt;
 
     public Long getId() {
@@ -43,6 +47,14 @@ public class SpecialOrderAuditItem {
         this.keyword = keyword;
     }
 
+    public String getChartType() {
+        return chartType;
+    }
+
+    public void setChartType(String chartType) {
+        this.chartType = chartType;
+    }
+
     public Integer getTargetRank() {
         return targetRank;
     }
@@ -58,6 +70,11 @@ public class SpecialOrderAuditItem {
     public void setCoverageNote(String coverageNote) {
         this.coverageNote = coverageNote;
     }
+
+    public BigDecimal getUnitPrice() { return unitPrice; }
+    public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
+    public Integer getExecutionDays() { return executionDays; }
+    public void setExecutionDays(Integer executionDays) { this.executionDays = executionDays; }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

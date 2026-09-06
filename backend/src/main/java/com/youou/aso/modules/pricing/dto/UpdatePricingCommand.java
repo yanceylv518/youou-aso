@@ -6,6 +6,10 @@ import java.math.BigDecimal;
 
 public record UpdatePricingCommand(
         PriceCode code,
-        BigDecimal unitPrice
+        BigDecimal unitPrice,
+        BigDecimal chinaUnitPrice
 ) {
+    public UpdatePricingCommand(PriceCode code, BigDecimal unitPrice) {
+        this(code, unitPrice, unitPrice);
+    }
 }

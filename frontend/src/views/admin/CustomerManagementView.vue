@@ -233,7 +233,7 @@ function formatDate(value: string | undefined | null) {
 <style scoped>
 .customer-page {
   padding: 12px 16px 24px;
-  color: #182230;
+  color: #0f172a;
 }
 
 .summary-grid {
@@ -255,14 +255,14 @@ function formatDate(value: string | undefined | null) {
 .summary-card span {
   display: block;
   margin-bottom: 8px;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
 .summary-card strong {
   display: block;
   overflow: hidden;
-  color: #182230;
+  color: #0f172a;
   font-size: 24px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -305,12 +305,12 @@ function formatDate(value: string | undefined | null) {
 
 .customer-table :deep(.el-table__cell) {
   padding: 12px 0;
-  color: #344054;
+  color: #334155;
 }
 
 .customer-table :deep(.el-table__header th) {
   background: #f8fafc;
-  color: #475467;
+  color: #475569;
   font-weight: 700;
 }
 
@@ -352,8 +352,8 @@ function formatDate(value: string | undefined | null) {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #eef4ff;
-  color: #175cd3;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-weight: 800;
 }
 
@@ -372,12 +372,12 @@ function formatDate(value: string | undefined | null) {
 }
 
 .customer-copy strong {
-  color: #182230;
+  color: #0f172a;
   font-weight: 700;
 }
 
 .customer-copy span {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
 }
 

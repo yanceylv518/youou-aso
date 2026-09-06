@@ -104,8 +104,8 @@
       />
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="t('applications.addApp')" width="720px" @closed="resetDialog">
-      <el-form class="add-app-form" label-position="right" label-width="96px" @submit.prevent>
+    <el-dialog append-to-body v-model="dialogVisible" :title="t('applications.addApp')" width="720px" @closed="resetDialog">
+      <el-form class="add-app-form" label-position="right" label-width="116px" @submit.prevent>
         <el-form-item :label="t('applications.store')">
           <el-radio-group v-model="form.storeType" class="store-tabs">
             <el-radio-button label="APP_STORE">
@@ -133,6 +133,8 @@
             v-model="form.regionCode"
             class="add-app-control"
             filterable
+            :filter-method="filterRegions"
+            @visible-change="handleRegionDropdownVisibility"
             :loading="regionLoading"
             :placeholder="t('applications.selectRegion')"
           >
@@ -142,14 +144,15 @@
               </span>
             </template>
             <el-option
-              v-for="region in regions"
+              v-for="region in prioritizedRegions"
               :key="region.code"
-              :label="locale.startsWith('zh') ? region.nameZh : region.nameEn"
+              :label="regionOptionLabel(region)"
               :value="region.code"
             >
               <span class="option-row">
                 <span class="flag-icon"><img :src="flagUrl(region.code)" :alt="region.code" /></span>
-                {{ locale.startsWith('zh') ? region.nameZh : region.nameEn }}
+                <strong>{{ region.code }}</strong>
+                <span>{{ locale.startsWith('zh') ? region.nameZh : region.nameEn }}</span>
               </span>
             </el-option>
           </el-select>
@@ -319,6 +322,8 @@ const pagination = reactive({
 })
 const allRegions = ref<MarketRegion[]>([])
 const regions = ref<MarketRegion[]>([])
+const regionSearchQuery = ref('')
+const prioritizedRegions = computed(() => prioritizeRegions(regions.value, regionSearchQuery.value))
 const searchResults = ref<StoreAppSearchResult[]>([])
 const selectedApp = ref<StoreAppSearchResult | null>(null)
 const hasSearched = ref(false)
@@ -661,6 +666,39 @@ function regionLabel(code: string) {
   return locale.value.startsWith('zh') ? region.nameZh : region.nameEn
 }
 
+function regionOptionLabel(region: MarketRegion) {
+  const name = locale.value.startsWith('zh') ? region.nameZh : region.nameEn
+  return `${region.code} · ${name}`
+}
+
+function filterRegions(query: string) {
+  regionSearchQuery.value = query.trim().toLocaleLowerCase()
+}
+
+function handleRegionDropdownVisibility(visible: boolean) {
+  if (!visible) regionSearchQuery.value = ''
+}
+
+function prioritizeRegions(list: MarketRegion[], query: string) {
+  if (!query) return list
+  return list
+    .map((region, index) => ({ region, index, score: regionSearchScore(region, query) }))
+    .filter((item) => item.score < 99)
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .map((item) => item.region)
+}
+
+function regionSearchScore(region: MarketRegion, query: string) {
+  const code = region.code.toLocaleLowerCase()
+  if (code === query) return 0
+  if (code.startsWith(query)) return 1
+  if (code.includes(query)) return 2
+  const names = [region.nameZh, region.nameEn].map((name) => name.toLocaleLowerCase())
+  if (names.some((name) => name.startsWith(query))) return 3
+  if (names.some((name) => name.includes(query))) return 4
+  return 99
+}
+
 function flagUrl(code: string) {
   return `https://flagcdn.com/24x18/${code.toLowerCase()}.png`
 }
@@ -715,7 +753,7 @@ onMounted(loadData)
 
 <style scoped>
 .app-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .table-toolbar {
@@ -725,7 +763,7 @@ onMounted(loadData)
   gap: 20px;
   margin-bottom: 16px;
   padding: 14px 16px;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -742,7 +780,7 @@ onMounted(loadData)
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #182230;
+  color: #0f172a;
   font-size: 14px;
   font-weight: 600;
 }
@@ -797,17 +835,17 @@ onMounted(loadData)
 }
 
 .search-button {
-  background: #ff7a1a;
-  border-color: #ff7a1a;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .search-button:hover {
-  background: #f26f0d;
-  border-color: #f26f0d;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .clear-button {
-  color: #344054;
+  color: #334155;
 }
 
 .app-table {
@@ -822,7 +860,7 @@ onMounted(loadData)
 
 .app-table :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
   font-weight: 600;
 }
 
@@ -858,8 +896,8 @@ onMounted(loadData)
   place-items: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #eef6ff;
-  color: #2d7dd2;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -879,17 +917,17 @@ onMounted(loadData)
 
 .muted {
   margin-top: 4px;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
 .danger-icon {
-  color: #f04438;
+  color: #dc2626;
 }
 
 .dialog-tip {
   margin: 0;
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
   line-height: 1.7;
 }
@@ -938,7 +976,7 @@ onMounted(loadData)
   border-radius: 10px;
   border: 1px dashed #9ec5fe;
   background: #f4f8ff;
-  color: #2d7dd2;
+  color: #2563eb;
   font-weight: 800;
   padding: 0;
   cursor: pointer;
@@ -950,8 +988,8 @@ onMounted(loadData)
 }
 
 .icon-preview:hover:not(:disabled) {
-  border-color: #409eff;
-  background: #eef6ff;
+  border-color: #2563eb;
+  background: #eff6ff;
 }
 
 .icon-preview:focus-visible {
@@ -973,7 +1011,7 @@ onMounted(loadData)
 
 .icon-upload-placeholder {
   font-size: 22px;
-  color: #2d7dd2;
+  color: #2563eb;
 }
 
 .icon-upload-actions {
@@ -984,7 +1022,7 @@ onMounted(loadData)
 }
 
 .icon-upload-tip {
-  color: #f04438;
+  color: #dc2626;
   font-size: 13px;
 }
 
@@ -1010,7 +1048,7 @@ onMounted(loadData)
 }
 
 .input-search-button:hover {
-  color: #2d7dd2;
+  color: #2563eb;
 }
 
 .input-search-button:disabled {
@@ -1022,7 +1060,7 @@ onMounted(loadData)
   width: 14px;
   height: 14px;
   border: 2px solid #d0d5dd;
-  border-top-color: #2d7dd2;
+  border-top-color: #2563eb;
   border-radius: 999px;
   animation: spin 0.8s linear infinite;
 }
@@ -1051,14 +1089,14 @@ onMounted(loadData)
   border: 1px solid #d7e0ea;
   border-radius: 8px;
   background: #ffffff;
-  color: #182230;
+  color: #0f172a;
   cursor: pointer;
   text-align: left;
 }
 
 .result-item:hover,
 .result-item.selected {
-  border-color: #2d7dd2;
+  border-color: #2563eb;
   background: #f3f8ff;
 }
 
@@ -1069,8 +1107,8 @@ onMounted(loadData)
   place-items: center;
   overflow: hidden;
   border-radius: 8px;
-  background: #eef6ff;
-  color: #2d7dd2;
+  background: #eff6ff;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -1096,12 +1134,12 @@ onMounted(loadData)
 
 .result-main span,
 .result-id {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 
 .result-category {
-  color: #344054;
+  color: #334155;
   font-size: 13px;
 }
 
@@ -1124,8 +1162,8 @@ onMounted(loadData)
   place-items: center;
   overflow: hidden;
   border-radius: 10px;
-  background: #e6f1ff;
-  color: #2d7dd2;
+  background: #dbeafe;
+  color: #2563eb;
   font-weight: 800;
 }
 
@@ -1142,7 +1180,7 @@ onMounted(loadData)
 }
 
 .selected-label {
-  color: #2d7dd2;
+  color: #2563eb;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1157,7 +1195,7 @@ onMounted(loadData)
 
 .selected-main span,
 .selected-id {
-  color: #667085;
+  color: #64748b;
   font-size: 13px;
 }
 

@@ -18,10 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 
 @Service
 public class AdminWalletService {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private final AdminWalletRepository adminWalletRepository;
     private final Clock clock;
 
@@ -53,7 +54,7 @@ public class AdminWalletService {
         transaction.setBalanceAfter(after);
         transaction.setRelatedOrderId(null);
         transaction.setRemark(command.remark());
-        transaction.setCreatedAt(LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+        transaction.setCreatedAt(LocalDateTime.ofInstant(clock.instant(), BUSINESS_ZONE));
         return WalletTransactionResult.from(adminWalletRepository.saveTransaction(transaction));
     }
 
@@ -87,7 +88,7 @@ public class AdminWalletService {
         transaction.setBalanceAfter(after);
         transaction.setRelatedOrderId(null);
         transaction.setRemark(command.remark().trim());
-        transaction.setCreatedAt(LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+        transaction.setCreatedAt(LocalDateTime.ofInstant(clock.instant(), BUSINESS_ZONE));
         return WalletTransactionResult.from(adminWalletRepository.saveTransaction(transaction));
     }
 
@@ -104,7 +105,7 @@ public class AdminWalletService {
     }
 
     private String generateTransactionNo() {
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), BUSINESS_ZONE);
         return BusinessNumberGenerator.generate("WT", now);
     }
 }

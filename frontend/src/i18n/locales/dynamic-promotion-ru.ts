@@ -1,0 +1,1 @@
+export default { title: 'Услуги продвижения', subtitle: 'Выберите подходящее решение для роста позиций в поиске, видимости приложения и конверсии в загрузки.', moduleCount: '{count} модулей', otherRegion: 'Другие регионы', chinaRegion: 'Китай', quotedAfterReview: 'Цена после проверки', createForCustomer: 'Заказать сейчас', orderNow: 'Заказать', empty: 'Нет доступных модулей' }

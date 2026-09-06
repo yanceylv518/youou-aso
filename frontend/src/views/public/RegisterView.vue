@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="auth-page">
     <el-form class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
       <div class="auth-brand">
@@ -120,7 +120,7 @@ async function submit() {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #182230;
+  color: #0f172a;
   font-weight: 800;
 }
 
@@ -144,29 +144,29 @@ p {
 
 h1 {
   margin: 0;
-  color: #182230;
+  color: #0f172a;
   font-size: 28px;
   line-height: 1.2;
 }
 
 .auth-header p {
   margin: 8px 0 0;
-  color: #667085;
+  color: #64748b;
   line-height: 1.65;
 }
 
 :deep(.el-form-item__label) {
-  color: #344054;
+  color: #334155;
   font-weight: 700;
 }
 
 :deep(.el-input__wrapper) {
   border-radius: 8px;
-  box-shadow: 0 0 0 1px #d8dee8 inset;
+  box-shadow: 0 0 0 1px #cbd5e1 inset;
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #1b75d0 inset, 0 0 0 3px rgb(27 117 208 / 12%);
+  box-shadow: 0 0 0 1px #1d4ed8 inset, 0 0 0 3px rgb(27 117 208 / 12%);
 }
 
 .full-width {
@@ -182,11 +182,11 @@ h1 {
   justify-content: center;
   gap: 8px;
   margin: 20px 0 0;
-  color: #667085;
+  color: #64748b;
 }
 
 .auth-switch a {
-  color: #1b75d0;
+  color: #1d4ed8;
   font-weight: 700;
   text-decoration: none;
 }

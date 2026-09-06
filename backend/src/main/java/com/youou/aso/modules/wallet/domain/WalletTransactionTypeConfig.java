@@ -6,6 +6,9 @@ public class WalletTransactionTypeConfig {
     private WalletTransactionType transactionType;
     private String displayNameZh;
     private String displayNameEn;
+    private String displayNameRu;
+    private String displayNamePt;
+    private String displayNameEs;
     private LocalDateTime updatedAt;
 
     public static WalletTransactionTypeConfig defaultFor(WalletTransactionType transactionType) {
@@ -45,8 +48,15 @@ public class WalletTransactionTypeConfig {
                 config.setDisplayNameEn("Delivery");
             }
         }
+        config.setDisplayNameRu(defaultRu(transactionType));
+        config.setDisplayNamePt(defaultPt(transactionType));
+        config.setDisplayNameEs(defaultEs(transactionType));
         return config;
     }
+
+    private static String defaultRu(WalletTransactionType type) { return switch (type) { case ORDER_DEDUCT -> "Списание по заказу"; case ORDER_REFUND -> "Возврат по заказу"; case ADMIN_RECHARGE -> "Пополнение"; case ADMIN_ADJUSTMENT -> "Корректировка"; case ADMIN_REFUND -> "Возврат администратора"; case ADMIN_GIFT -> "Бонусное зачисление"; case ADMIN_DEDUCT -> "Корректирующее списание"; case DELIVERY -> "Выполнение заказа"; }; }
+    private static String defaultPt(WalletTransactionType type) { return switch (type) { case ORDER_DEDUCT -> "Débito da encomenda"; case ORDER_REFUND -> "Reembolso da encomenda"; case ADMIN_RECHARGE -> "Carregamento"; case ADMIN_ADJUSTMENT -> "Ajuste"; case ADMIN_REFUND -> "Reembolso administrativo"; case ADMIN_GIFT -> "Crédito de oferta"; case ADMIN_DEDUCT -> "Débito de ajuste"; case DELIVERY -> "Execução da encomenda"; }; }
+    private static String defaultEs(WalletTransactionType type) { return switch (type) { case ORDER_DEDUCT -> "Cargo del pedido"; case ORDER_REFUND -> "Reembolso del pedido"; case ADMIN_RECHARGE -> "Recarga"; case ADMIN_ADJUSTMENT -> "Ajuste"; case ADMIN_REFUND -> "Reembolso administrativo"; case ADMIN_GIFT -> "Abono promocional"; case ADMIN_DEDUCT -> "Cargo de ajuste"; case DELIVERY -> "Ejecución del pedido"; }; }
 
     public WalletTransactionType getTransactionType() {
         return transactionType;
@@ -71,6 +81,13 @@ public class WalletTransactionTypeConfig {
     public void setDisplayNameEn(String displayNameEn) {
         this.displayNameEn = displayNameEn;
     }
+
+    public String getDisplayNameRu() { return displayNameRu; }
+    public void setDisplayNameRu(String value) { this.displayNameRu = value; }
+    public String getDisplayNamePt() { return displayNamePt; }
+    public void setDisplayNamePt(String value) { this.displayNamePt = value; }
+    public String getDisplayNameEs() { return displayNameEs; }
+    public void setDisplayNameEs(String value) { this.displayNameEs = value; }
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;

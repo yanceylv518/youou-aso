@@ -20,8 +20,13 @@ public record CreateOrderCommand(
         Integer rating5Count,
         Integer rating4Count,
         Integer review5Count,
-        Integer review4Count
+        Integer review4Count,
+        Long orderModuleId
 ) {
+    public CreateOrderCommand(Long customerAppId, String regionCode, OrderType orderType, LocalDate startDate, LocalDate endDate, Integer executionHours, List<String> keywords, List<KeywordQuantity> keywordItems, List<RegionOrderItem> regionItems, List<ReviewDetail> reviewDetails, Integer dailyDownloadCount, Integer rating5Count, Integer rating4Count, Integer review5Count, Integer review4Count) {
+        this(customerAppId, regionCode, orderType, startDate, endDate, executionHours, keywords, keywordItems, regionItems, reviewDetails, dailyDownloadCount, rating5Count, rating4Count, review5Count, review4Count, null);
+    }
+
     public CreateOrderCommand(
             Long customerAppId,
             String regionCode,
@@ -177,8 +182,12 @@ public record CreateOrderCommand(
             Integer rating5Count,
             Integer rating4Count,
             Integer review5Count,
-            Integer review4Count
+            Integer review4Count,
+            List<String> attachmentIds
     ) {
+        public RegionOrderItem(String regionCode, Integer dailyDownloadCount, Integer rating5Count, Integer rating4Count, Integer review5Count, Integer review4Count) {
+            this(regionCode, dailyDownloadCount, rating5Count, rating4Count, review5Count, review4Count, null);
+        }
     }
 
     public record ReviewDetail(

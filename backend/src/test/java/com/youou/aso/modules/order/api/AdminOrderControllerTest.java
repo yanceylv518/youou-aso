@@ -34,8 +34,9 @@ class AdminOrderControllerTest {
     @Test
     void adminCanCreateOrderForCustomer() {
         AsoOrder created = sampleOrder();
-        when(orderService.createCustomerOrder(
+        when(orderService.createAdminOrderForCustomer(
                 20L,
+                1L,
                 new com.youou.aso.modules.order.dto.CreateOrderCommand(
                         30L,
                         OrderType.DOWNLOAD,
@@ -75,8 +76,9 @@ class AdminOrderControllerTest {
         assertThat(result.waitPayment()).isFalse();
         assertThat(result.order()).isNotNull();
         assertThat(result.order().customerId()).isEqualTo(20L);
-        verify(orderService).createCustomerOrder(
+        verify(orderService).createAdminOrderForCustomer(
                 20L,
+                1L,
                 new com.youou.aso.modules.order.dto.CreateOrderCommand(
                         30L,
                         OrderType.DOWNLOAD,

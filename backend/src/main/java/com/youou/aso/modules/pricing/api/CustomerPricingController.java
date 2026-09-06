@@ -6,6 +6,7 @@ import com.youou.aso.common.error.ErrorCode;
 import com.youou.aso.modules.account.domain.AccountType;
 import com.youou.aso.modules.account.service.AuthenticatedAccount;
 import com.youou.aso.modules.pricing.dto.PricingConfigResult;
+import com.youou.aso.modules.pricing.dto.OrderTypeRegionPricingResult;
 import com.youou.aso.modules.pricing.service.PricingService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,12 @@ public class CustomerPricingController {
     public ApiResponse<List<PricingConfigResult>> listPricing(@AuthenticationPrincipal AuthenticatedAccount account) {
         requireCustomer(account);
         return ApiResponse.ok(pricingService.listPricingResults());
+    }
+
+    @GetMapping("/regions")
+    public ApiResponse<List<OrderTypeRegionPricingResult>> listRegionPricing(@AuthenticationPrincipal AuthenticatedAccount account) {
+        requireCustomer(account);
+        return ApiResponse.ok(pricingService.listOrderTypeRegionPricing());
     }
 
     private void requireCustomer(AuthenticatedAccount account) {

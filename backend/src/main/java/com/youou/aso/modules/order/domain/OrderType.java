@@ -6,5 +6,6 @@ public enum OrderType {
     RATING,
     REVIEW,
     RANK_GUARANTEE,
+    CHART_RANK_GUARANTEE,
     KEYWORD_COVERAGE
 }

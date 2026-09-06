@@ -178,11 +178,9 @@ public class JdbcAdminPermissionRepository implements AdminPermissionRepository 
         return jdbcTemplate.queryForList(
                 """
                         SELECT DISTINCT m.menu_code
-                        FROM admin_account_role ar
-                        JOIN sys_role r ON r.id = ar.role_id AND r.status = 'ENABLED'
-                        JOIN sys_role_menu rm ON rm.role_id = r.id
-                        JOIN sys_menu m ON m.id = rm.menu_id AND m.status = 'ENABLED' AND m.menu_type <> 'BUTTON'
-                        WHERE ar.admin_id = ? AND m.menu_code IS NOT NULL
+                        FROM admin_account_menu am
+                        JOIN sys_menu m ON m.id = am.menu_id AND m.status = 'ENABLED' AND m.menu_type <> 'BUTTON'
+                        WHERE am.admin_id = ? AND m.menu_code IS NOT NULL
                         ORDER BY m.menu_code
                         """,
                 String.class,
@@ -195,11 +193,9 @@ public class JdbcAdminPermissionRepository implements AdminPermissionRepository 
         return jdbcTemplate.queryForList(
                 """
                         SELECT DISTINCT m.permission_code
-                        FROM admin_account_role ar
-                        JOIN sys_role r ON r.id = ar.role_id AND r.status = 'ENABLED'
-                        JOIN sys_role_menu rm ON rm.role_id = r.id
-                        JOIN sys_menu m ON m.id = rm.menu_id AND m.status = 'ENABLED'
-                        WHERE ar.admin_id = ? AND m.permission_code IS NOT NULL
+                        FROM admin_account_menu am
+                        JOIN sys_menu m ON m.id = am.menu_id AND m.status = 'ENABLED'
+                        WHERE am.admin_id = ? AND m.permission_code IS NOT NULL
                         ORDER BY m.permission_code
                         """,
                 String.class,
@@ -222,6 +218,35 @@ public class JdbcAdminPermissionRepository implements AdminPermissionRepository 
                 "INSERT INTO admin_account_role (admin_id, role_id) VALUES (?, ?)",
                 batch
         );
+        jdbcTemplate.update("DELETE FROM admin_account_menu WHERE admin_id = ?", adminId);
+        jdbcTemplate.update(
+                """
+                        INSERT IGNORE INTO admin_account_menu (admin_id, menu_id)
+                        SELECT ?, rm.menu_id
+                        FROM sys_role_menu rm
+                        WHERE rm.role_id IN (SELECT role_id FROM admin_account_role WHERE admin_id = ?)
+                        """,
+                adminId,
+                adminId
+        );
+    }
+
+    @Override
+    public List<Long> findMenuIdsByAdminId(Long adminId) {
+        return jdbcTemplate.queryForList(
+                "SELECT menu_id FROM admin_account_menu WHERE admin_id = ? ORDER BY menu_id",
+                Long.class,
+                adminId
+        );
+    }
+
+    @Override
+    @Transactional
+    public void replaceAdminMenus(Long adminId, List<Long> menuIds) {
+        jdbcTemplate.update("DELETE FROM admin_account_menu WHERE admin_id = ?", adminId);
+        if (menuIds == null || menuIds.isEmpty()) return;
+        List<Object[]> batch = menuIds.stream().distinct().map(menuId -> new Object[]{adminId, menuId}).toList();
+        jdbcTemplate.batchUpdate("INSERT INTO admin_account_menu (admin_id, menu_id) VALUES (?, ?)", batch);
     }
 
     private AdminRoleResult withRoleMenus(AdminRoleResult role) {

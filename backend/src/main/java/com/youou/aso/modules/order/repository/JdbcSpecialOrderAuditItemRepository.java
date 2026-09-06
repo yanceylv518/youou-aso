@@ -20,8 +20,11 @@ public class JdbcSpecialOrderAuditItemRepository implements SpecialOrderAuditIte
         item.setAuditId(rs.getLong("audit_id"));
         item.setRegionCode(rs.getString("region_code"));
         item.setKeyword(rs.getString("keyword"));
+        item.setChartType(rs.getString("chart_type"));
         item.setTargetRank(readInteger(rs, "target_rank"));
         item.setCoverageNote(rs.getString("coverage_note"));
+        item.setUnitPrice(rs.getBigDecimal("unit_price"));
+        item.setExecutionDays(readInteger(rs, "execution_days"));
         item.setCreatedAt(readDateTime(rs.getTimestamp("created_at")));
         return item;
     };
@@ -38,8 +41,8 @@ public class JdbcSpecialOrderAuditItemRepository implements SpecialOrderAuditIte
         jdbcTemplate.batchUpdate(
                 """
                         INSERT INTO special_order_audit_item
-                        (audit_id, region_code, keyword, target_rank, coverage_note)
-                        VALUES (?, ?, ?, ?, ?)
+                        (audit_id, region_code, keyword, chart_type, target_rank, coverage_note, unit_price, execution_days)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 items,
                 items.size(),
@@ -47,14 +50,23 @@ public class JdbcSpecialOrderAuditItemRepository implements SpecialOrderAuditIte
                     ps.setLong(1, auditId);
                     ps.setString(2, item.getRegionCode());
                     ps.setString(3, item.getKeyword());
+                    ps.setString(4, item.getChartType());
                     if (item.getTargetRank() == null) {
-                        ps.setObject(4, null);
+                        ps.setObject(5, null);
                     } else {
-                        ps.setInt(4, item.getTargetRank());
+                        ps.setInt(5, item.getTargetRank());
                     }
-                    ps.setString(5, item.getCoverageNote());
+                    ps.setString(6, item.getCoverageNote());
+                    ps.setBigDecimal(7, item.getUnitPrice());
+                    ps.setObject(8, item.getExecutionDays());
                 }
         );
+    }
+
+    @Override
+    public void updatePricing(Long id, java.math.BigDecimal unitPrice, Integer executionDays) {
+        jdbcTemplate.update("UPDATE special_order_audit_item SET unit_price = ?, execution_days = ? WHERE id = ?",
+                unitPrice, executionDays, id);
     }
 
     @Override

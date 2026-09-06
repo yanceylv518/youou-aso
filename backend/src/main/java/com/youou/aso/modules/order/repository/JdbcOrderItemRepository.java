@@ -22,6 +22,7 @@ public class JdbcOrderItemRepository implements OrderItemRepository {
         item.setItemName(rs.getString("item_name"));
         item.setRegionCode(rs.getString("region_code"));
         item.setQuantity(rs.getInt("quantity"));
+        item.setCompletedQuantity((Integer) rs.getObject("completed_quantity"));
         item.setUnitPrice(rs.getBigDecimal("unit_price"));
         item.setAmount(rs.getBigDecimal("amount"));
         item.setMetadataJson(rs.getString("metadata_json"));
@@ -67,6 +68,35 @@ public class JdbcOrderItemRepository implements OrderItemRepository {
         jdbcTemplate.update("DELETE FROM aso_order_item WHERE order_id = ?", orderId);
     }
 
+    @Override
+    public void updateCompletedQuantities(List<OrderItem> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate("UPDATE aso_order_item SET completed_quantity = ? WHERE id = ?", items, items.size(),
+                (ps, item) -> {
+                    ps.setInt(1, item.getCompletedQuantity());
+                    ps.setLong(2, item.getId());
+                });
+    }
+
+    @Override
+    public void updateQuantitiesAndProgress(List<OrderItem> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate(
+                "UPDATE aso_order_item SET quantity = ?, completed_quantity = ?, amount = ? WHERE id = ?",
+                items,
+                items.size(),
+                (ps, item) -> {
+                    ps.setInt(1, item.getQuantity());
+                    ps.setInt(2, item.getCompletedQuantity());
+                    ps.setBigDecimal(3, item.getAmount());
+                    ps.setLong(4, item.getId());
+                }
+        );
+    }
     @Override
     public Map<Long, List<OrderItem>> findByOrderIds(List<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {

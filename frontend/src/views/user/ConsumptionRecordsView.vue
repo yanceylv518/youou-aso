@@ -44,7 +44,7 @@
       <el-table v-loading="loading" class="record-table" :data="records" :empty-text="t('wallet.emptyConsumption')">
         <el-table-column :label="t('wallet.orderNo')" min-width="190">
           <template #default="{ row }">
-            {{ row.orderNo || '-' }}
+            <span class="data-id">{{ row.orderNo || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.appName')" min-width="180" show-overflow-tooltip>
@@ -59,17 +59,17 @@
         </el-table-column>
         <el-table-column :label="t('wallet.balanceBefore')" width="150" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.balanceBefore) }}
+            <span class="balance-value">{{ formatMoney(row.balanceBefore) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.orderAmount')" width="140" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.amount) }}
+            <span class="money-value is-debit">{{ formatMoney(row.amount) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.balanceAfterConsumption')" width="150" align="right">
           <template #default="{ row }">
-            {{ formatMoney(row.balanceAfter) }}
+            <span class="balance-value">{{ formatMoney(row.balanceAfter) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.paidAt')" min-width="170">
@@ -124,6 +124,7 @@ const orderTypeOptions: OrderType[] = [
   'RATING',
   'REVIEW',
   'RANK_GUARANTEE',
+  'CHART_RANK_GUARANTEE',
   'KEYWORD_COVERAGE'
 ]
 onMounted(() => {
@@ -193,7 +194,7 @@ function formatDate(value: string | undefined | null) {
 
 <style scoped>
 .consumption-page {
-  color: #182230;
+  color: #0f172a;
 }
 
 .filter-panel {
@@ -228,7 +229,7 @@ function formatDate(value: string | undefined | null) {
 
 .table-card {
   overflow: hidden;
-  border: 1px solid #e4e9f2;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgb(16 24 40 / 4%);
@@ -244,7 +245,7 @@ function formatDate(value: string | undefined | null) {
 
 .record-table :deep(.el-table__header th) {
   background: #f7f9fc;
-  color: #667085;
+  color: #64748b;
   font-weight: 700;
 }
 

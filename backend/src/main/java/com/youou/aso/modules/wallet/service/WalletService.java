@@ -8,4 +8,7 @@ public interface WalletService {
     WalletDebitResult refundForOrder(Long customerId, BigDecimal amount, String remark);
 
     BigDecimal currentBalanceForUpdate(Long customerId);
+
+    default void linkTransactionToOrder(Long transactionId, Long orderId) {
+    }
 }

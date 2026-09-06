@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosError } from 'axios'
+import { readBrowserStorage, removeBrowserStorage } from '@/utils/browserStorage'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -27,7 +28,7 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
-  const stored = localStorage.getItem(AUTH_STORAGE_KEY)
+  const stored = readBrowserStorage(AUTH_STORAGE_KEY)
   if (stored) {
     try {
       const session = JSON.parse(stored) as StoredAuthSession
@@ -35,7 +36,7 @@ http.interceptors.request.use((config) => {
         config.headers.Authorization = `Bearer ${session.token}`
       }
     } catch {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
+      removeBrowserStorage(AUTH_STORAGE_KEY)
     }
   }
   return config
@@ -50,7 +51,7 @@ http.interceptors.response.use(
     const isAuthExpired = status === 401 || (status === 403 && !isBusinessForbidden)
 
     if (isAuthExpired) {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
+      removeBrowserStorage(AUTH_STORAGE_KEY)
       const currentPath = `${window.location.pathname}${window.location.search}`
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
