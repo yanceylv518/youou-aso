@@ -55,14 +55,14 @@
             </el-option>
           </el-select>
         </label>
-        <label v-if="showOrderTypeFilter" class="query-item">
+        <label class="query-item">
           <span>{{ t('ordersPage.taskType') }}</span>
           <el-select v-model="filters.orderType" clearable :placeholder="t('ordersPage.allTaskTypes')">
             <el-option :label="t('ordersPage.allTaskTypes')" value="" />
             <el-option v-for="type in orderTypeOptions" :key="type" :label="typeLabel(type)" :value="type" />
           </el-select>
         </label>
-        <label class="query-item">
+        <label v-if="!isPendingReviewList" class="query-item">
           <span>{{ t('ordersPage.orderCategory') }}</span>
           <el-select v-model="filters.specialOrder" clearable :placeholder="t('ordersPage.allOrderCategories')">
             <el-option :label="t('ordersPage.allOrderCategories')" value="" />
@@ -529,7 +529,7 @@ const statusOptions: OrderListStatus[] = [
   'CANCELLED',
   'SUBMITTED'
 ]
-const orderTypeOptions: OrderType[] = [
+const allOrderTypeOptions: OrderType[] = [
   'KEYWORD_INSTALL',
   'DOWNLOAD',
   'RATING',
@@ -541,8 +541,10 @@ const orderTypeOptions: OrderType[] = [
 
 const storeType = computed(() => route.meta.storeType as StoreType)
 const statusFilter = computed(() => route.meta.statusFilter as OrderListStatus | undefined)
+const isPendingReviewList = computed(() => statusFilter.value === 'PENDING_REVIEW')
+const specialOrderTypeOptions: OrderType[] = ['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE']
+const orderTypeOptions = computed(() => isPendingReviewList.value ? specialOrderTypeOptions : allOrderTypeOptions)
 const showStatusFilter = computed(() => !statusFilter.value)
-const showOrderTypeFilter = computed(() => !statusFilter.value)
 const showBatchConfirm = computed(() => (statusFilter.value || filters.status) === 'PENDING_CONFIRM')
 const showBatchExecute = computed(() => statusFilter.value === 'PENDING_EXECUTION')
 const showBatchPause = computed(() => statusFilter.value === 'EXECUTING')
@@ -655,6 +657,10 @@ function handlePageSizeChange() {
 function resetRouteFilters() {
   filters.storeType = storeType.value || ''
   filters.status = statusFilter.value || ''
+  if (isPendingReviewList.value) {
+    filters.specialOrder = ''
+    if (filters.orderType && !specialOrderTypeOptions.includes(filters.orderType)) filters.orderType = ''
+  }
 }
 
 function viewDetail(order: OrderRow) {

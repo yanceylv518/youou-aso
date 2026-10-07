@@ -198,8 +198,13 @@
         <el-table-column v-if="isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
           <template #default="{ row }">{{ money(row.refundAmount) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="120" align="center">
-          <template #default="{ row }">{{ t(`ordersPage.statuses.${row.status}`) }} <ReservedOrderTag :order="row" /></template>
+        <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="130" align="center">
+          <template #default="{ row }">
+            <div class="order-status-tags">
+              <el-tag class="order-status-tag" :type="statusTone(row.status)" effect="light">{{ t(`ordersPage.statuses.${row.status}`) }}</el-tag>
+              <ReservedOrderTag :order="row" />
+            </div>
+          </template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.expectedCompletedAt) }}</template>
@@ -256,7 +261,7 @@
 
 <script setup lang="ts">
 import { orderModuleLabel } from '@/utils/orderModuleLabel'
-import { formatCurrency } from '@/utils/presentation'
+import { formatCurrency, statusTone } from '@/utils/presentation'
 import { useAuthStore } from '@/stores/auth'
 import ReservedOrderTag from '@/components/ReservedOrderTag.vue'
 import { formatOrderSchedule } from '@/utils/orderTime'
@@ -277,7 +282,7 @@ const router = useRouter()
 const editAuth = useAuthStore()
 const { t, locale } = useI18n()
 
-const defaultColumnKeys = ['app', 'customer', 'type', 'amount', 'createdAt', 'actions']
+const defaultColumnKeys = ['app', 'customer', 'type', 'amount', 'status', 'createdAt', 'actions']
 const allColumnKeys = [
   'orderNo', 'app', 'appIdentifier', 'store', 'region', 'customer', 'type', 'orderCategory', 'orderTime', 'totalDays',
   'executionHours', 'quantity', 'unitPrice', 'amount', 'refundAmount', 'status', 'expectedCompletedAt', 'confirmedAt',

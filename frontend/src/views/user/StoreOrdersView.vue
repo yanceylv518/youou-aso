@@ -458,7 +458,10 @@ function canRenewOrder(order: OrderRow) {
 
 function renewOrder(order: OrderRow) {
   if (!canRenewOrder(order)) return
-  router.push({ name: 'user-order-create', query: { renewOrderId: String(order.id) } })
+  router.push({ name: 'user-order-create', query: {
+    renewOrderId: String(order.id), orderType: order.orderType, storeType: order.storeType,
+    ...(order.orderModuleId != null ? { orderModuleId: String(order.orderModuleId) } : {})
+  } })
 }
 
 function canSubmitApprovedAudit(order: OrderRow) {

@@ -68,6 +68,7 @@ export default {
     cancelledOrderEditHint: 'Ao reenviar um pedido cancelado, o valor atual será cobrado novamente e será necessária a confirmação do administrador.',
     adminEditHint: 'O número e o estado são mantidos. Os aumentos são cobrados e as reduções reembolsadas.',
     adminEditUnavailable: 'Só é possível editar pedidos pendentes de confirmação ou execução. Atualize o estado.',
+    renewModuleUnavailable: 'O serviço original está indisponível ou não pode ser identificado de forma única. Selecione um serviço antes de enviar.',
     reservedOrder: 'Pedido agendado',
     orderNotStarted: 'A hora de início ainda não chegou. Remova os pedidos futuros da execução em lote.',
     keywordOrderTimePast: 'A hora do pedido não pode ser anterior à atual (UTC+8, precisão de minutos).',

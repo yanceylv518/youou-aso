@@ -8,6 +8,7 @@
           </el-button>
         </div>
         <el-alert v-if="originalEditingStatus === 'CANCELLED'" :title="t('orderCreate.cancelledOrderEditHint')" type="info" :closable="false" show-icon />
+        <el-alert v-if="hydratedRenewOrderId !== null && !selectedOrderModule" :title="t('orderCreate.renewModuleUnavailable')" type="warning" :closable="false" show-icon />
         <div class="order-workspace">
           <main class="order-main">
             <section class="form-section">
@@ -664,6 +665,7 @@
 </template>
 
 <script setup lang="ts">
+import { restoreOrderModuleId } from '@/utils/restoreOrderModule'
 import { formatCurrency } from '@/utils/presentation'
 import { defaultKeywordOrderTime, businessMinute, keywordOrderTimeIsPast } from '@/utils/orderTime'
 
@@ -1087,7 +1089,7 @@ function disabledKeywordOrderDate(date: Date) {
   return localDate < businessMinute().slice(0, 10)
 }
 const submitDisabled = computed(() => {
-  if (submitting.value || !selectedApp.value) return true
+  if (submitting.value || !selectedApp.value || !selectedOrderModule.value) return true
   if (isSpecialOrder.value) return specialItems.value.length === 0
   if (form.orderType === 'KEYWORD_INSTALL') return (keywordStartMode.value === 'scheduled' && (!keywordInstallDateTime.value || keywordTimeInPast.value)) || quantity.value <= 0
   return !dateRange.value || quantity.value <= 0
@@ -1937,7 +1939,7 @@ async function applyRenewOrderQuery() {
         hydratedRenewOrderId.value = null
         return
       }
-      hydrateSpecialAudit(audit)
+      hydrateSpecialAudit(audit, order)
     } else {
       hydratePendingPaymentOrder(order)
       resetRenewOrderDate(order.orderType)
@@ -1971,7 +1973,7 @@ function hydratePendingPaymentOrder(order: Order) {
   try {
     form.storeType = order.storeType
     form.orderType = order.orderType
-    selectedOrderModuleId.value = order.orderModuleId || null
+    selectedOrderModuleId.value = restoreOrderModuleId(order, orderModules.value)
     form.customerAppId = order.customerAppId
     form.regionCode = order.regionCode === 'MULTI' ? '' : order.regionCode || ''
     form.executionHours = order.executionHours || 1
@@ -1994,11 +1996,16 @@ function hydratePendingPaymentOrder(order: Order) {
   }
 }
 
-function hydrateSpecialAudit(audit: SpecialOrderAudit) {
+function hydrateSpecialAudit(audit: SpecialOrderAudit, sourceOrder: Order) {
   hydratingOrder = true
   try {
     form.storeType = audit.storeType
     form.orderType = audit.orderType
+    selectedOrderModuleId.value = restoreOrderModuleId({
+      orderType: audit.orderType,
+      orderModuleId: sourceOrder.orderModuleId ?? audit.orderModuleId,
+      orderModuleName: sourceOrder.orderModuleName
+    }, orderModules.value)
     form.customerAppId = audit.customerAppId
     form.regionCode = audit.regionCode || ''
     form.contactType = audit.contactType || ''

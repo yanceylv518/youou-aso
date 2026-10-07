@@ -524,6 +524,7 @@ export default {
     cancelledOrderEditHint: '已取消订单重新提交后将按当前金额重新扣款，并等待管理员确认。',
     adminEditHint: '编辑后保留原订单号和状态；金额增加补扣差额，减少退还差额。',
     adminEditUnavailable: '仅待确认和待执行订单可以编辑，请刷新订单状态。',
+    renewModuleUnavailable: '原订单的服务类型已停用或无法唯一匹配，请重新选择服务类型后再提交。',
     reservedOrder: '预定单',
     orderNotStarted: '订单还未到开始时间，不能执行；批量操作请移除未到时间的订单',
     keywordOrderTimePast: '订单时间不能早于当前时间（北京时间，精确到分钟）',

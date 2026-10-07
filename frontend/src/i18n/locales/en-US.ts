@@ -524,6 +524,7 @@ export default {
     cancelledOrderEditHint: 'Resubmitting a cancelled order charges the current total again and requires administrator confirmation.',
     adminEditHint: 'Editing keeps the order number and status. Price increases are charged and decreases refunded.',
     adminEditUnavailable: 'Only orders awaiting confirmation or execution can be edited. Refresh the order status.',
+    renewModuleUnavailable: 'The original service is unavailable or cannot be uniquely matched. Select a service before submitting.',
     reservedOrder: 'Scheduled order',
     orderNotStarted: 'The order start time has not arrived. Remove future orders before batch execution.',
     keywordOrderTimePast: 'Order time cannot be earlier than the current time (UTC+8, minute precision).',
