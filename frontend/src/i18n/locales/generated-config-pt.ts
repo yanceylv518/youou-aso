@@ -6,8 +6,13 @@ const messages = {
     "notice": "Os preços não podem ser negativos. Os pedidos existentes devem usar o instantâneo de preços capturado quando o pedido foi criado.",
     "otherRegionPrice": "Preço em outra região",
     "chinaRegionPrice": "Preço na região da China",
-    "regionConfigTitle": "Regiões por tipo de pedido",
-    "regionConfigHelp": "Selecione as regiões disponíveis. Deixe o preço regional vazio para usar o preço predefinido acima.",
+    "supportedStores": "Lojas disponíveis",
+    "storeRequired": "Selecione pelo menos uma loja",
+    "moduleDefault": "Preço padrão do módulo",
+    "removedRegionsHint": "Estas regiões selecionadas já não estão disponíveis para o módulo e serão removidas ao guardar: {regions}",
+    "emptyRegionsHint": "Módulos sem regiões não aceitam pedidos. Configure as regiões após criar o módulo.",
+    "regionConfigTitle": "Regiões por módulo",
+    "regionConfigHelp": "Configure países e preços por módulo. Preços vazios usam o preço padrão do módulo.",
     "selectRegions": "Selecionar regiões disponíveis",
     "regionOverrideTitle": "Preços regionais (opcional)",
     "useDefaultPrice": "Preço predefinido",
@@ -183,7 +188,7 @@ const messages = {
     "subtitle": "Escolha um serviço de promoção e insira os detalhes do pedido.",
     "createForCustomer": "Encomende agora",
     "specialPending": "Encomende agora",
-    "specialNotice": "Os administradores podem inserir um valor e enviar pedidos especiais para clientes. O saldo suficiente é cobrado imediatamente; saldo insuficiente aguarda pagamento após aprovação."
+    "specialNotice": "Após o administrador introduzir o preço unitário e o número de dias de cada item, o sistema calcula automaticamente o total. Se o saldo for suficiente, o pagamento é debitado de imediato; caso contrário, a encomenda fica aprovada e a aguardar pagamento."
   }
 } as const
 

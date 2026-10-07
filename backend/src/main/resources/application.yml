@@ -9,13 +9,14 @@ spring:
     active: local
   messages:
     basename: i18n/messages
+    fallback-to-system-locale: false
     encoding: UTF-8
   jackson:
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
 
 server:
-  port: 8080
+  port: 8081
 
 youou:
   security:

@@ -9,12 +9,12 @@ import {
   type RegisterPayload
 } from '@/api/auth'
 import { isAxiosError } from 'axios'
-import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '@/utils/browserStorage'
+import { readAuthSession, clearAuthSession, writeAuthSession } from '@/utils/authStorage'
 
 export type AccountType = 'CUSTOMER' | 'ADMIN'
 export type AdminRole = 'ADMIN' | 'SUPER_ADMIN'
 
-export const AUTH_STORAGE_KEY = 'youou_aso_auth'
+export { AUTH_STORAGE_KEY } from '@/utils/authStorage'
 
 export interface StoredAuthSession {
   token: string
@@ -75,7 +75,7 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     restore() {
-      const stored = readBrowserStorage(AUTH_STORAGE_KEY)
+      const stored = readAuthSession()
       if (!stored) {
         return
       }
@@ -93,11 +93,11 @@ export const useAuthStore = defineStore('auth', {
         this.menuCodes = Array.isArray(session.menuCodes) ? session.menuCodes : []
         this.permissions = Array.isArray(session.permissions) ? session.permissions : []
       } catch {
-        removeBrowserStorage(AUTH_STORAGE_KEY)
+        clearAuthSession()
       }
     },
     persist() {
-      writeBrowserStorage(AUTH_STORAGE_KEY, JSON.stringify(toStoredSession(this)))
+      writeAuthSession(JSON.stringify(toStoredSession(this)))
     },
     applyLoginResult(result: LoginResult) {
       this.token = result.token
@@ -162,7 +162,7 @@ export const useAuthStore = defineStore('auth', {
       this.roleKeys = []
       this.menuCodes = []
       this.permissions = []
-      removeBrowserStorage(AUTH_STORAGE_KEY)
+      clearAuthSession()
     }
   }
 })

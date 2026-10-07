@@ -53,8 +53,8 @@
         </template>
       </el-table-column>
       <el-table-column prop="sortOrder" :label="t('regions.sortOrder')" width="110" align="right" />
-      <el-table-column :label="t('ordersPage.actions')" width="100" fixed="right" align="center">
-        <template #default="{ row }"><el-button class="edit-action" plain type="primary" size="small" @click="openEdit(row)">{{ t('common.edit') }}</el-button></template>
+      <el-table-column :label="t('ordersPage.actions')" width="140" fixed="right" align="center">
+        <template #default="{ row }"><el-button :icon="Edit" class="edit-action" plain type="primary" size="small" @click="openEdit(row)">{{ t('common.edit') }}</el-button></template>
       </el-table-column>
     </el-table>
     <div class="pagination-bar">
@@ -88,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import { Edit } from '@element-plus/icons-vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'

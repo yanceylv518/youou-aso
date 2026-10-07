@@ -24,6 +24,7 @@ import com.youou.aso.modules.account.repository.WalletAccountRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -101,13 +102,15 @@ public class AuthService {
         this.clock = clock;
     }
 
+    @Transactional
     public RegisterCustomerResult registerCustomer(RegisterCustomerCommand command) {
+        customerAccountRepository.lockRegistration();
         String username = command.username().trim();
         String email = command.email().trim().toLowerCase();
-        if (customerAccountRepository.existsByUsername(username)) {
+        if (customerAccountRepository.existsByUsername(username) || adminAccountRepository.existsByUsername(username) || adminAccountRepository.existsByEmail(username) || customerAccountRepository.existsByEmail(username)) {
             throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        if (customerAccountRepository.existsByEmail(email)) {
+        if (customerAccountRepository.existsByEmail(email) || adminAccountRepository.existsByEmail(email) || adminAccountRepository.existsByUsername(email) || customerAccountRepository.existsByUsername(email)) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
@@ -254,7 +257,7 @@ public class AuthService {
         if (customer.getStatus() == AccountStatus.LOCKED) {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
         }
-        String token = jwtTokenService.issue(customer.getId(), AccountType.CUSTOMER.name(), "");
+        String token = jwtTokenService.issue(customer.getId(), AccountType.CUSTOMER.name(), "", customer.getPasswordHash());
         return new LoginResult(
                 token,
                 customer.getId(),
@@ -280,7 +283,7 @@ public class AuthService {
         if (admin.getStatus() == AccountStatus.LOCKED) {
             throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
         }
-        String token = jwtTokenService.issue(admin.getId(), AccountType.ADMIN.name(), admin.getRoleCode().name());
+        String token = jwtTokenService.issue(admin.getId(), AccountType.ADMIN.name(), admin.getRoleCode().name(), admin.getPasswordHash());
         AdminAccessResult adminAccess = adminPermissionService == null
                 ? AdminAccessResult.empty()
                 : adminPermissionService.accessForAdmin(admin.getId(), admin.getRoleCode().name());

@@ -80,25 +80,25 @@
         <h2>{{ t('mailConfig.preview') }}</h2>
         <div class="status-row">
           <span>{{ t('mailConfig.smtpStatus') }}</span>
-          <el-tag :type="form.smtpHost ? 'success' : 'info'">
+          <el-tag class="wrapping-tag" :type="form.smtpHost ? 'success' : 'info'">
             {{ form.smtpHost ? t('mailConfig.configured') : t('mailConfig.usingFallback') }}
           </el-tag>
         </div>
         <div class="status-row">
           <span>{{ t('mailConfig.passwordStatus') }}</span>
-          <el-tag :type="config?.passwordConfigured || form.password ? 'success' : 'info'">
+          <el-tag class="wrapping-tag" :type="config?.passwordConfigured || form.password ? 'success' : 'info'">
             {{ config?.passwordConfigured || form.password ? t('mailConfig.configured') : t('mailConfig.notConfigured') }}
           </el-tag>
         </div>
         <div class="status-row">
           <span>{{ t('mailConfig.orderNotificationSection') }}</span>
-          <el-tag :type="form.orderNotificationEnabled ? 'success' : 'info'">
+          <el-tag class="wrapping-tag" :type="form.orderNotificationEnabled ? 'success' : 'info'">
             {{ form.orderNotificationEnabled ? t('mailConfig.enabled') : t('mailConfig.disabled') }}
           </el-tag>
         </div>
         <div class="recipient-list">
           <span v-if="recipientList.length === 0" class="empty">{{ t('mailConfig.noRecipients') }}</span>
-          <el-tag v-for="recipient in recipientList" :key="recipient" effect="plain">
+          <el-tag class="wrapping-tag" v-for="recipient in recipientList" :key="recipient" effect="plain">
             {{ recipient }}
           </el-tag>
         </div>
@@ -323,11 +323,13 @@ h3 {
 }
 
 .preview-card {
+  min-width: 0;
   padding: 20px;
 }
 
 .status-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -336,11 +338,15 @@ h3 {
   font-weight: 700;
 }
 
+.status-row > span:not(.el-tag) { min-width: 0; flex: 1 1 120px; overflow-wrap: anywhere; }
 .recipient-list {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.recipient-list :deep(.el-tag) { text-align: left; }
 
 .empty {
   color: #98a2b3;

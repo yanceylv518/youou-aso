@@ -20,8 +20,8 @@ public class JdbcOrderEventRepository implements OrderEventRepository {
                 """
                         INSERT INTO aso_order_event
                         (order_id, event_type, quantity_before, quantity_after, completed_before, completed_after,
-                         amount_before, amount_after, created_by_admin_id, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                         amount_before, amount_after, created_by_admin_id, reason, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                         """,
                 event.getOrderId(),
                 event.getEventType(),
@@ -31,7 +31,8 @@ public class JdbcOrderEventRepository implements OrderEventRepository {
                 event.getCompletedAfter(),
                 event.getAmountBefore(),
                 event.getAmountAfter(),
-                event.getCreatedByAdminId()
+                event.getCreatedByAdminId(),
+                event.getReason()
         );
     }
 
@@ -43,6 +44,7 @@ public class JdbcOrderEventRepository implements OrderEventRepository {
                     OrderEvent event = new OrderEvent();
                     event.setId(rs.getLong("id"));
                     event.setOrderId(rs.getLong("order_id"));
+                    event.setReason(rs.getString("reason"));
                     event.setEventType(rs.getString("event_type"));
                     event.setQuantityBefore((Integer) rs.getObject("quantity_before"));
                     event.setQuantityAfter((Integer) rs.getObject("quantity_after"));

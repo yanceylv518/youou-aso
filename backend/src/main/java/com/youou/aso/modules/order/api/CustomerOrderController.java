@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -131,7 +132,9 @@ public class CustomerOrderController {
                 request.rating4Count(),
                 request.review5Count(),
                 request.review4Count(),
-                request.orderModuleId()
+                request.orderModuleId(),
+                request.scheduledStartAt(),
+                request.startImmediately()
         );
     }
 
@@ -175,7 +178,9 @@ public class CustomerOrderController {
             Integer rating4Count,
             Integer review5Count,
             Integer review4Count,
-            Long orderModuleId
+            @NotNull Long orderModuleId,
+            LocalDateTime scheduledStartAt,
+            Boolean startImmediately
     ) {
     }
 }

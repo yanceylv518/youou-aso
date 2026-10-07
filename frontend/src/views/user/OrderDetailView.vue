@@ -3,10 +3,10 @@
     <div class="detail-toolbar">
       <el-button :icon="ArrowLeft" @click="goBack">{{ t('orderDetail.back') }}</el-button>
       <el-button :icon="Refresh" @click="loadOrder">{{ t('ordersPage.refresh') }}</el-button>
-      <el-button v-if="order?.status === 'PENDING_CONFIRM' && !order.sourceAuditId" type="primary" :icon="Edit" @click="editOrder">
+      <el-button v-if="order && ['PENDING_CONFIRM', 'CANCELLED'].includes(order.status) && !order.sourceAuditId" type="primary" :icon="Edit" @click="editOrder">
         {{ t('ordersPage.editOrder') }}
       </el-button>
-      <el-button :icon="Download" :loading="exporting" :disabled="!order" @click="handleExportDetail">
+      <el-button :icon="Download" :loading="exporting" :disabled="!order || loading" @click="handleExportDetail">
         {{ t('orderDetail.exportDetail') }}
       </el-button>
     </div>
@@ -33,32 +33,31 @@
           <span>{{ t('ordersPage.orderNo') }}</span>
           <strong>{{ order.orderNo }}</strong>
           <el-tag :type="statusTagType(order.status)" effect="light">{{ statusLabel(order.status) }}</el-tag>
+            <ReservedOrderTag :order="order" />
         </div>
       </div>
 
       <section v-if="sourceAudit?.items?.length" class="detail-card">
         <h2>{{ t('orderDetail.itemDetails') }}</h2>
+        <p v-if="latestCompletionAdjustment" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ t('ordersPage.adjustmentReason') }}：{{ latestCompletionAdjustment.reason || t('ordersPage.adjustmentReasonNotRecorded') }}</p>
         <el-table :data="sourceAudit.items" class="detail-table">
           <el-table-column :label="t('ordersPage.region')" min-width="150">
             <template #default="{ row }">{{ detailRegionLabel(row.regionCode) }}</template>
           </el-table-column>
-          <el-table-column :label="order.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keyword')" min-width="220">
+          <el-table-column :label="order.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keywords')" min-width="220">
             <template #default="{ row }">{{ order.orderType === 'CHART_RANK_GUARANTEE' ? (row.chartType || row.keyword || '-') : (row.keyword || '-') }}</template>
           </el-table-column>
           <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('orderCreate.targetRank')" min-width="130">
             <template #default="{ row }">{{ row.targetRank ?? '-' }}</template>
           </el-table-column>
-          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('orderCreate.unitPrice')" min-width="120" align="right">
-            <template #default="{ row }">{{ row.unitPrice == null ? '-' : money(row.unitPrice) }}</template>
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(order.orderType)" :label="t('orderCreate.unitPrice')" min-width="120" align="right">
+            <template #default="{ row }">{{ row.unitPrice == null ? '-' : formatCurrency(row.unitPrice, 4) }}</template>
           </el-table-column>
-          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('orderCreate.executionDays')" min-width="100" align="right">
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(order.orderType)" :label="t('orderCreate.executionDays')" min-width="100" align="right">
             <template #default="{ row }">{{ row.executionDays ?? '-' }}</template>
           </el-table-column>
-          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(order.orderType)" :label="t('ordersPage.amount')" min-width="120" align="right">
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(order.orderType)" :label="t('ordersPage.amount')" min-width="120" align="right">
             <template #default="{ row }">{{ row.amount == null ? '-' : money(row.amount) }}</template>
-          </el-table-column>
-          <el-table-column v-if="order.orderType === 'KEYWORD_COVERAGE'" :label="t('orderCreate.currentRank')" min-width="180">
-            <template #default="{ row }">{{ row.coverageNote || '-' }}</template>
           </el-table-column>
         </el-table>
       </section>
@@ -78,7 +77,7 @@
           <h2>{{ t('orderDetail.basicInfo') }}</h2>
           <dl class="info-list">
             <div><dt>{{ t('ordersPage.orderCategory') }}</dt><dd>{{ order.sourceAuditId ? t('ordersPage.categories.SPECIAL') : t('ordersPage.categories.REGULAR') }}</dd></div>
-            <div><dt>{{ orderDateLabel }}</dt><dd>{{ order.orderStartDate }} - {{ order.orderEndDate }}</dd></div>
+            <div><dt>{{ orderDateLabel }}</dt><dd>{{ formatOrderSchedule(order) }}</dd></div>
             <div><dt>{{ t('ordersPage.region') }}</dt><dd>{{ regionLabel(order.regionCode) }}</dd></div>
             <div><dt>{{ t('orderDetail.totalDays') }}</dt><dd>{{ valueOrDash(order.totalDays) }}</dd></div>
             <div v-if="isKeywordInstall"><dt>{{ t('orderDetail.executionHours') }}</dt><dd>{{ valueOrDash(order.executionHours) }}</dd></div>
@@ -93,7 +92,7 @@
           <h2>{{ t('orderDetail.amountInfo') }}</h2>
           <div class="amount-summary">
             <span>{{ t('ordersPage.amount') }}</span>
-            <strong>{{ money(order.totalAmount) }}</strong>
+            <strong>{{ money(settlement!.totalAmount) }}</strong>
           </div>
           <div v-if="order.refundAmount !== null && order.refundAmount !== undefined" class="amount-summary">
             <span>{{ t('ordersPage.refundAmount') }}</span>
@@ -105,8 +104,8 @@
               <strong>{{ valueOrDash(order.totalDays) }}</strong>
             </div>
             <div>
-              <span>{{ t('ordersPage.quantity') }}</span>
-              <strong>{{ valueOrDash(order.quantity) }}</strong>
+              <span>{{ t(order.status === 'COMPLETED' ? 'ordersPage.completedQuantity' : 'ordersPage.quantity') }}</span>
+              <strong>{{ valueOrDash(settlement!.quantity) }}</strong>
             </div>
             <div>
               <span>{{ t('orderDetail.unitPrice') }}</span>
@@ -118,7 +117,8 @@
 
       <section v-if="!sourceAudit?.items?.length" class="detail-card">
         <h2>{{ t('orderDetail.itemDetails') }}</h2>
-        <el-table :data="order.items" class="detail-table" :empty-text="t('orderDetail.noItems')">
+        <p v-if="latestCompletionAdjustment" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ t('ordersPage.adjustmentReason') }}：{{ latestCompletionAdjustment.reason || t('ordersPage.adjustmentReasonNotRecorded') }}</p>
+        <el-table :data="settlement!.items" class="detail-table" :empty-text="t('orderDetail.noItems')">
           <el-table-column :label="t('ordersPage.type')" min-width="150">
             <template #default="{ row }">{{ itemTypeLabel(row.itemType) }}</template>
           </el-table-column>
@@ -128,17 +128,20 @@
           <el-table-column :label="t('ordersPage.region')" min-width="150">
             <template #default="{ row }">{{ detailRegionLabel(row.regionCode) }}</template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.quantity')" width="110" align="right">
+          <el-table-column :label="t(order.status === 'COMPLETED' ? 'ordersPage.completedQuantity' : 'ordersPage.quantity')" width="110" align="right">
             <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.completedQuantity')" width="120" align="right">
+          <el-table-column v-if="order.status === 'COMPLETED'" key="completion-status" :label="t('ordersPage.status')" width="120" align="center">
+            <template #default><el-tag type="success" effect="light">{{ statusLabel('COMPLETED') }}</el-tag></template>
+          </el-table-column>
+          <el-table-column v-if="order.status !== 'COMPLETED'" key="completed-quantity" :label="t('ordersPage.completedQuantity')" width="120" align="right">
             <template #default="{ row }">{{ valueOrDash(row.completedQuantity) }}</template>
           </el-table-column>
-          <el-table-column :label="t('ordersPage.unfinishedQuantity')" width="120" align="right">
+          <el-table-column v-if="order.status !== 'COMPLETED'" key="unfinished-quantity" :label="t('ordersPage.unfinishedQuantity')" width="120" align="right">
             <template #default="{ row }">{{ row.completedQuantity === null ? '-' : (row.quantity || 0) - row.completedQuantity }}</template>
           </el-table-column>
           <el-table-column :label="t('orderDetail.unitPrice')" width="130" align="right">
-            <template #default="{ row }">{{ row.unitPrice === null ? '-' : money(row.unitPrice) }}</template>
+            <template #default="{ row }">{{ row.unitPrice === null ? '-' : formatCurrency(row.unitPrice, 4) }}</template>
           </el-table-column>
           <el-table-column :label="t('ordersPage.amount')" width="130" align="right">
             <template #default="{ row }">{{ row.amount === null ? '-' : money(row.amount) }}</template>
@@ -164,6 +167,11 @@
 </template>
 
 <script setup lang="ts">
+import { orderModuleLabel } from '@/utils/orderModuleLabel'
+import { orderTimeline } from '@/utils/presentation'
+import { statusTone, formatCurrency } from '@/utils/presentation'
+import ReservedOrderTag from '@/components/ReservedOrderTag.vue'
+import { formatOrderSchedule } from '@/utils/orderTime'
 import { downloadReviewAttachment } from '@/api/reviewAttachments'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -174,12 +182,15 @@ import { getCustomerOrder, type Order, type OrderStatus, type OrderType } from '
 import { getCustomerSpecialAudit, type SpecialOrderAudit } from '@/api/specialOrderAudits'
 import { getEnabledRegions, type MarketRegion, type StoreType } from '@/api/applications'
 import { exportOrderDetailExcel } from '@/utils/orderDetailExport'
+import { orderSettlement } from '@/utils/orderSettlement'
 
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
 
 const order = ref<Order | null>(null)
+const latestCompletionAdjustment = computed(() => order.value?.events?.filter(event => event.eventType === 'COMPLETION_ADJUSTED').at(-1))
+const settlement = computed(() => order.value ? orderSettlement(order.value) : null)
 const sourceAudit = ref<SpecialOrderAudit | null>(null)
 const regions = ref<MarketRegion[]>([])
 const loading = ref(false)
@@ -193,39 +204,16 @@ const showItemNameColumn = computed(() => {
 })
 const displayUnitPrice = computed(() => {
   if (!order.value) return '-'
-  if (order.value.unitPrice !== null) return money(order.value.unitPrice)
+  if (order.value.unitPrice !== null) return formatCurrency(order.value.unitPrice, 4)
   const prices = [...new Set(order.value.items
     .map((item) => item.unitPrice)
     .filter((price): price is number => price !== null && price !== undefined)
-    .map((price) => Number(price).toFixed(2)))]
+    .map((price) => Number(price).toFixed(4)))]
   if (prices.length === 0) return '-'
   if (prices.length === 1) return `$${prices[0]}`
   return t('orderDetail.multipleUnitPrices')
 })
-const timelineItems = computed(() => {
-  if (!order.value) return []
-
-  const mainFlow = [
-    { key: 'created', label: t('ordersPage.createdAt'), value: formatDateTime(order.value.createdAt) },
-    { key: 'confirmed', label: t('orderDetail.confirmedAt'), value: formatDateTime(order.value.confirmedAt) },
-    { key: 'executed', label: t('orderDetail.executedAt'), value: formatDateTime(order.value.executedAt) }
-  ].filter((item) => item.value !== '-')
-
-  const operationFlow = (order.value.events || [])
-    .slice()
-    .sort((left, right) => left.id - right.id)
-    .map((event) => ({
-      key: 'event-' + event.id,
-      label: orderEventLabel(event),
-      value: formatDateTime(event.createdAt)
-    }))
-
-  const completionFlow = order.value.completedAt
-    ? [{ key: 'completed', label: t('orderDetail.completedAt'), value: formatDateTime(order.value.completedAt) }]
-    : []
-
-  return [...mainFlow, ...operationFlow, ...completionFlow]
-})
+const timelineItems = computed(() => order.value ? orderTimeline(order.value, t, orderEventLabel) : [])
 onMounted(() => {
   loadRegions()
   loadOrder()
@@ -264,7 +252,7 @@ function goBack() {
 }
 
 function editOrder() {
-  if (!order.value || order.value.status !== 'PENDING_CONFIRM' || order.value.sourceAuditId) return
+  if (!order.value || !['PENDING_CONFIRM', 'CANCELLED'].includes(order.value.status) || order.value.sourceAuditId) return
   router.push({ name: 'user-order-create', query: { orderId: String(order.value.id) } })
 }
 
@@ -272,7 +260,10 @@ async function handleExportDetail() {
   if (!order.value) return
   exporting.value = true
   try {
-    await exportOrderDetailExcel(order.value, { storeLabel, regionLabel })
+    if (order.value.sourceAuditId && !sourceAudit.value?.items?.length) {
+      sourceAudit.value = await getCustomerSpecialAudit(order.value.sourceAuditId)
+    }
+    await exportOrderDetailExcel(order.value, { storeLabel, regionLabel, label: t }, sourceAudit.value?.items)
     ElMessage.success(t('orderDetail.exportSuccess'))
   } catch {
     ElMessage.error(t('orderDetail.exportFailed'))
@@ -298,7 +289,7 @@ function typeLabel(type?: OrderType | null) {
 }
 
 function orderTypeLabel(value: Order) {
-  return value.orderModuleName?.trim() || typeLabel(value.orderType)
+  return orderModuleLabel(value)
 }
 
 function itemTypeLabel(type?: string | null) {
@@ -315,22 +306,16 @@ function storeLabel(store?: StoreType | null) {
   return 'App Store'
 }
 
-function statusTagType(status?: OrderStatus | null) {
-  if (status === 'COMPLETED') return 'success'
-  if (status === 'EXECUTING') return 'primary'
-  if (status === 'PAUSED') return 'info'
-  if (status === 'PENDING_EXECUTION') return 'warning'
-  if (status === 'PENDING_PAYMENT') return 'danger'
-  if (status === 'CANCELLED') return 'danger'
-  return 'info'
-}
+const statusTagType = statusTone
 
 function orderEventLabel(event: Order['events'][number]) {
+  if (['CREATED', 'RESUBMITTED', 'PAID', 'CONFIRMED', 'EXECUTED', 'CANCELLED', 'COMPLETED'].includes(event.eventType)) return t(`orderDetail.events.${event.eventType.toLowerCase()}`)
+  if (event.eventType === 'CLOSED') return t('ordersPage.closeSuccess')
   if (event.eventType === 'PAUSED') return t('orderDetail.events.paused')
   if (event.eventType === 'RESUMED') return t('orderDetail.events.resumed')
-  if (event.eventType === 'UPDATED') {
+  if (event.eventType === 'UPDATED' || event.eventType === 'COMPLETION_ADJUSTED') {
     const changes: string[] = []
-    if (event.quantityBefore !== null && event.quantityAfter !== null) {
+    if (event.quantityBefore !== null && event.quantityAfter !== null && event.quantityBefore !== event.quantityAfter) {
       changes.push(t('orderDetail.events.quantityChanged', {
         before: event.quantityBefore,
         after: event.quantityAfter
@@ -350,6 +335,7 @@ function orderEventLabel(event: Order['events'][number]) {
         after: Number(event.amountAfter).toFixed(2)
       }))
     }
+    if (event.reason) changes.push(`${t('ordersPage.adjustmentReason')}：${event.reason}`)
     return t('orderDetail.events.updatedSummary', { changes: changes.join('，') })
   }
   return event.eventType
@@ -358,9 +344,7 @@ function formatDateTime(value?: string | null) {
   return value ? value.replace('T', ' ').slice(0, 19) : '-'
 }
 
-function money(value: number) {
-  return `$${Number(value).toFixed(2)}`
-}
+const money = formatCurrency
 
 function valueOrDash(value?: number | null) {
   return value === null || value === undefined ? '-' : value
@@ -625,4 +609,5 @@ function valueOrDash(value?: number | null) {
     grid-template-columns: 1fr;
   }
 }
+.timeline-item { min-width: 0; overflow-wrap: anywhere; }
 </style>

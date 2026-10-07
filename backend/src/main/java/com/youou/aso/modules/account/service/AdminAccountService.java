@@ -40,13 +40,15 @@ public class AdminAccountService {
                 .toList();
     }
 
+    @Transactional
     public AdminAccountResult createAdmin(CreateAdminAccountCommand command) {
+        customerAccountRepository.lockRegistration();
         String username = command.username().trim();
         String email = command.email().trim().toLowerCase();
-        if (adminAccountRepository.existsByUsername(username) || customerAccountRepository.existsByUsername(username)) {
+        if (adminAccountRepository.existsByUsername(username) || customerAccountRepository.existsByUsername(username) || adminAccountRepository.existsByEmail(username) || customerAccountRepository.existsByEmail(username)) {
             throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        if (adminAccountRepository.existsByEmail(email) || customerAccountRepository.existsByEmail(email)) {
+        if (adminAccountRepository.existsByEmail(email) || customerAccountRepository.existsByEmail(email) || adminAccountRepository.existsByUsername(email) || customerAccountRepository.existsByUsername(email)) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 

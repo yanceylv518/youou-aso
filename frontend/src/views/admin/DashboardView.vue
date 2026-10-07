@@ -72,7 +72,7 @@
           </el-table-column>
           <el-table-column :label="t('dashboard.status')" width="130" align="center">
             <template #default="{ row }">
-              <el-tag :type="orderStatusTag(row.status)" effect="light">
+              <el-tag class="order-status-tag" :type="orderStatusTag(row.status)" effect="light">
                 {{ t(`ordersPage.statuses.${row.status}`) }}
               </el-tag>
             </template>
@@ -98,7 +98,7 @@
           </el-table-column>
           <el-table-column :label="t('dashboard.status')" width="120" align="center">
             <template #default="{ row }">
-              <el-tag type="warning" effect="light">{{ t(`specialAudit.statuses.${row.status}`) }}</el-tag>
+              <el-tag class="order-status-tag" type="warning" effect="light">{{ t(`specialAudit.statuses.${row.status}`) }}</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -135,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import { statusTone, formatCurrency } from '@/utils/presentation'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -203,22 +204,9 @@ function canReadOrders() {
   ].some((code) => auth.hasMenu(code))
 }
 
-function orderStatusTag(status: OrderStatus) {
-  if (status === 'COMPLETED') return 'success'
-  if (status === 'CANCELLED') return 'danger'
-  if (status === 'PENDING_PAYMENT') return 'danger'
-  if (status === 'PAUSED') return 'info'
-  if (status === 'EXECUTING') return 'warning'
-  return 'info'
-}
+const orderStatusTag = statusTone
 
-function formatMoney(value: string | number | undefined | null) {
-  if (value === undefined || value === null || value === '') return '-'
-  return `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`
-}
+const formatMoney = formatCurrency
 
 function formatDate(value: string | undefined | null) {
   return value ? value.replace('T', ' ') : '-'

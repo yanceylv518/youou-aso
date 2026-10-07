@@ -69,7 +69,7 @@ public class CustomerSpecialOrderAuditController {
                         request.requestedContent(),
                         request.contactType(),
                         request.contactValue(),
-                        request.items()
+                        request.items(), request.orderModuleId()
                 )
         )));
     }
@@ -123,10 +123,10 @@ public class CustomerSpecialOrderAuditController {
             String contactType,
             String contactValue,
 
-            List<SubmitSpecialAuditCommand.AuditItem> items
+            List<SubmitSpecialAuditCommand.AuditItem> items, @NotNull Long orderModuleId
     ) {
         public SubmitSpecialAuditRequest(Long customerAppId, OrderType orderType, String requestedContent) {
-            this(customerAppId, null, orderType, requestedContent, null, null, null);
+            this(customerAppId, null, orderType, requestedContent, null, null, null, null);
         }
     }
 }

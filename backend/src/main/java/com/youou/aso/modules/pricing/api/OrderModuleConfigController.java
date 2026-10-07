@@ -33,14 +33,14 @@ public class OrderModuleConfigController {
     public ApiResponse<OrderModuleConfig> create(@Valid @RequestBody ModuleRequest r) {
         return ApiResponse.ok(service.save(null,r.moduleName(),r.moduleNameEn(),r.moduleNameRu(),r.moduleNamePt(),r.moduleNameEs(),
                 r.moduleDescription(),r.moduleDescriptionEn(),r.moduleDescriptionRu(),r.moduleDescriptionPt(),r.moduleDescriptionEs(),
-                r.orderType(),r.unitPrice(),r.chinaUnitPrice(),r.enabled(),r.sortOrder()));
+                r.orderType(),r.unitPrice(),r.chinaUnitPrice(),r.enabled(),r.sortOrder(),r.storeTypes()));
     }
     @PreAuthorize("@perm.has('pricing:update')")
     @PutMapping("/api/admin/order-modules/{id}")
     public ApiResponse<OrderModuleConfig> update(@PathVariable Long id,@Valid @RequestBody ModuleRequest r) {
         return ApiResponse.ok(service.save(id,r.moduleName(),r.moduleNameEn(),r.moduleNameRu(),r.moduleNamePt(),r.moduleNameEs(),
                 r.moduleDescription(),r.moduleDescriptionEn(),r.moduleDescriptionRu(),r.moduleDescriptionPt(),r.moduleDescriptionEs(),
-                r.orderType(),r.unitPrice(),r.chinaUnitPrice(),r.enabled(),r.sortOrder()));
+                r.orderType(),r.unitPrice(),r.chinaUnitPrice(),r.enabled(),r.sortOrder(),r.storeTypes()));
     }
     @PreAuthorize("@perm.has('pricing:update')")
     @DeleteMapping("/api/admin/order-modules/{id}")
@@ -59,7 +59,7 @@ public class OrderModuleConfigController {
             @NotBlank @Size(max=500) String moduleDescriptionRu, @NotBlank @Size(max=500) String moduleDescriptionPt,
             @NotBlank @Size(max=500) String moduleDescriptionEs, @NotNull OrderType orderType,
             @DecimalMin("0") BigDecimal unitPrice,
-            @DecimalMin("0") BigDecimal chinaUnitPrice, boolean enabled, int sortOrder) {}
+            @DecimalMin("0") BigDecimal chinaUnitPrice, boolean enabled, int sortOrder, @NotEmpty List<com.youou.aso.modules.appmanagement.domain.StoreType> storeTypes) {}
 
     public record TranslationRequest(
             @NotBlank @Pattern(regexp="zh-CN|en-US|ru-RU|pt-PT|es-ES") String sourceLocale,

@@ -3,6 +3,7 @@ import type { OrderType } from './orders'
 import type { AppLocale } from '@/i18n'
 
 export interface OrderModuleConfig {
+  storeTypes: import('./applications').StoreType[]
   id: number
   moduleName: string
   moduleNameEn: string

@@ -24,7 +24,14 @@ import java.util.Set;
 public class PricingService {
     private final PricingConfigRepository pricingConfigRepository;
 
+    private final com.youou.aso.modules.pricing.repository.OrderModuleConfigRepository modules;
+    private final com.youou.aso.modules.appmanagement.repository.MarketRegionRepository regions;
+    @org.springframework.beans.factory.annotation.Autowired
+    public PricingService(PricingConfigRepository pricingConfigRepository, com.youou.aso.modules.pricing.repository.OrderModuleConfigRepository modules, com.youou.aso.modules.appmanagement.repository.MarketRegionRepository regions) {
+        this.pricingConfigRepository=pricingConfigRepository; this.modules=modules; this.regions=regions;
+    }
     public PricingService(PricingConfigRepository pricingConfigRepository) {
+        this.modules=null; this.regions=null;
         this.pricingConfigRepository = pricingConfigRepository;
     }
 
@@ -77,6 +84,11 @@ public class PricingService {
     }
 
     public List<OrderTypeRegionPricingResult> listOrderTypeRegionPricing() {
+        if (modules != null) return modules.findAll().stream().map(module -> {
+            Map<PriceCode, Map<String, BigDecimal>> prices = new LinkedHashMap<>();
+            priceCodes(module.orderType()).forEach(code -> prices.put(code, pricingConfigRepository.findModulePrices(module.id(),code)));
+            return new OrderTypeRegionPricingResult(module.id(),module.orderType(),pricingConfigRepository.findModuleRegions(module.id()),prices);
+        }).toList();
         return List.of(OrderType.values()).stream().map(orderType -> {
             Map<PriceCode, Map<String, BigDecimal>> prices = new LinkedHashMap<>();
             priceCodes(orderType).forEach(code -> prices.put(code, pricingConfigRepository.findRegionPrices(code)));
@@ -87,6 +99,31 @@ public class PricingService {
     @Transactional
     public List<OrderTypeRegionPricingResult> updateOrderTypeRegionPricing(List<OrderTypeRegionPricingResult> configs) {
         if (configs == null || configs.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        if (modules != null) {
+            java.util.Set<Long> ids = new java.util.HashSet<>();
+            for (OrderTypeRegionPricingResult config : configs) {
+                if (config == null || config.orderModuleId() == null || !ids.add(config.orderModuleId()) || config.allowedRegionCodes() == null) throw new BusinessException(ErrorCode.BAD_REQUEST);
+                var module=modules.findById(config.orderModuleId()).orElseThrow(() -> new BusinessException(ErrorCode.PRICE_INVALID));
+                if (module.orderType()!=config.orderType()) throw new BusinessException(ErrorCode.BAD_REQUEST);
+                for (String code:config.allowedRegionCodes()) {
+                    var region=regions.findByCode(code == null ? "" : code).orElseThrow(() -> new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED));
+                    if (!region.isEnabled() || module.storeTypes().stream().noneMatch(region::supports) || ((module.orderType()==OrderType.RATING || module.orderType()==OrderType.REVIEW) && "CN".equals(code))) throw new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+                }
+                if (config.regionPrices()!=null) config.regionPrices().forEach((code,values) -> {
+                    if (!priceCodes(module.orderType()).contains(code) || values==null) throw new BusinessException(ErrorCode.PRICE_INVALID);
+                    values.forEach((region,price) -> { if (price!=null && (price.signum()<=0 || price.scale()>4 || price.precision()-price.scale()>14)) throw new BusinessException(ErrorCode.PRICE_INVALID); });
+                });
+            }
+            for (OrderTypeRegionPricingResult config:configs) {
+                pricingConfigRepository.replaceModuleRegions(config.orderModuleId(),config.allowedRegionCodes().stream().distinct().toList());
+                for (PriceCode code:priceCodes(config.orderType())) {
+                    Map<String,BigDecimal> prices=new LinkedHashMap<>();
+                    if (config.regionPrices()!=null) config.regionPrices().getOrDefault(code,Map.of()).forEach((region,price) -> { if(price!=null && config.allowedRegionCodes().contains(region)) prices.put(region,price); });
+                    pricingConfigRepository.replaceModulePrices(config.orderModuleId(),code,prices);
+                }
+            }
+            return listOrderTypeRegionPricing();
+        }
         for (OrderTypeRegionPricingResult config : configs) {
             if (config == null || config.orderType() == null || config.allowedRegionCodes() == null || config.allowedRegionCodes().isEmpty()) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -99,7 +136,7 @@ public class PricingService {
                 Map<String, BigDecimal> valid = new LinkedHashMap<>();
                 requested.getOrDefault(priceCode, Map.of()).forEach((region, price) -> {
                     String normalized = region == null ? "" : region.trim().toUpperCase();
-                    if (!normalized.isBlank() && regions.contains(normalized) && price != null && price.signum() >= 0) valid.put(normalized, price);
+                    if (!normalized.isBlank() && regions.contains(normalized) && price != null && price.signum() > 0) valid.put(normalized, price);
                 });
                 pricingConfigRepository.replaceRegionPrices(priceCode, valid);
             }

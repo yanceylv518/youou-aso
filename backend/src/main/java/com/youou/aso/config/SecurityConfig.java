@@ -1,6 +1,7 @@
 package com.youou.aso.config;
 
 import com.youou.aso.modules.account.service.JwtAuthenticationFilter;
+import com.youou.aso.modules.account.service.AccountSessionValidator;
 import com.youou.aso.modules.account.service.JwtTokenService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -41,7 +42,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtTokenService jwtTokenService) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, AccountSessionValidator sessions) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -57,7 +58,7 @@ public class SecurityConfig {
                         .requestMatchers("/uploads/app-icons/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(sessions), UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 

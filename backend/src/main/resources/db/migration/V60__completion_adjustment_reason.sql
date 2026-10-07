@@ -1,0 +1,1 @@
+ALTER TABLE aso_order_event ADD COLUMN reason VARCHAR(500) NULL;

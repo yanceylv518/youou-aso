@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record SpecialOrderAuditResult(
-        Long id,
+        Long id, Long orderModuleId,
         String auditNo,
         Long customerId,
         Long customerAppId,
@@ -35,7 +35,7 @@ public record SpecialOrderAuditResult(
 ) {
     public static SpecialOrderAuditResult from(SpecialOrderAudit audit) {
         return new SpecialOrderAuditResult(
-                audit.getId(),
+                audit.getId(), audit.getOrderModuleId(),
                 audit.getAuditNo(),
                 audit.getCustomerId(),
                 audit.getCustomerAppId(),

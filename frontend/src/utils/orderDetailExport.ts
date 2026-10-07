@@ -1,9 +1,13 @@
+import { orderSettlement } from './orderSettlement'
+import { formatOrderStart } from './orderTime'
 import type { StoreType } from '@/api/applications'
-import type { Order, OrderItem, OrderType } from '@/api/orders'
+import type { Order } from '@/api/orders'
+import type { SpecialOrderAuditItem } from '@/api/specialOrderAudits'
 
 interface OrderDetailExportFormatters {
   storeLabel: (store?: StoreType | null) => string
   regionLabel: (code?: string | null) => string
+  label: (key: string) => string
 }
 
 type DetailRowValue = string | number | null | undefined
@@ -16,9 +20,9 @@ interface SheetConfig {
 
 const DAY_MS = 86400000
 
-export async function exportOrderDetailExcel(order: Order, formatters: OrderDetailExportFormatters) {
+export async function exportOrderDetailExcel(order: Order, formatters: OrderDetailExportFormatters, specialItems?: SpecialOrderAuditItem[]) {
+  const sheetConfig = createSheetConfig(order, formatters, specialItems)
   const workbook = await createExcelWorkbook()
-  const sheetConfig = createSheetConfig(order, formatters)
   const worksheet = workbook.addWorksheet(sheetConfig.name)
   worksheet.addRow(sheetConfig.headers)
   sheetConfig.rows.forEach((row) => worksheet.addRow(row.map((value) => value ?? '')))
@@ -57,7 +61,12 @@ export async function exportOrderDetailExcel(order: Order, formatters: OrderDeta
   )
 }
 
-function createSheetConfig(order: Order, formatters: OrderDetailExportFormatters): SheetConfig {
+export function createSheetConfig(order: Order, formatters: OrderDetailExportFormatters, specialItems?: SpecialOrderAuditItem[]): SheetConfig {
+  order = { ...order, ...orderSettlement(order) }
+  if (['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(order.orderType)) {
+    if (!specialItems?.length) throw new Error('Special order details are required for export')
+    return specialKeywordSheet(order, formatters, specialItems)
+  }
   if (order.orderType === 'KEYWORD_INSTALL') {
     return keywordSheet(order, formatters)
   }
@@ -70,10 +79,30 @@ function createSheetConfig(order: Order, formatters: OrderDetailExportFormatters
   return keywordSheet(order, formatters)
 }
 
+function specialKeywordSheet(order: Order, formatters: OrderDetailExportFormatters, items: SpecialOrderAuditItem[]): SheetConfig {
+  const chart = order.orderType === 'CHART_RANK_GUARANTEE'
+  const ranking = order.orderType !== 'KEYWORD_COVERAGE'
+  const keys = ['ordersPage.store', 'ordersPage.orderTime', 'ordersPage.appIdentifier', 'ordersPage.region',
+    chart ? 'orderCreate.chartType' : 'orderCreate.keywords',
+    ...(ranking ? ['orderCreate.targetRank'] : []),
+    'orderCreate.unitPrice', 'orderCreate.executionDays', 'ordersPage.amount']
+  return {
+    name: 'Special order details',
+    headers: keys.map(key => formatters.label(key)),
+    rows: items.map(item => [
+      formatters.storeLabel(order.storeType), formatOrderStart(order), order.appIdentifier,
+      areaName(formatters, item.regionCode || order.regionCode),
+      chart ? item.chartType || item.keyword || '' : item.keyword || '',
+      ...(ranking ? [item.targetRank] : []),
+      item.unitPrice, item.executionDays, item.amount
+    ])
+  }
+}
+
 function keywordSheet(order: Order, formatters: OrderDetailExportFormatters): SheetConfig {
   const rows = order.items.map((item) => [
     formatters.storeLabel(order.storeType),
-    dateOnly(order.orderStartDate),
+    formatOrderStart(order),
     order.appIdentifier,
     areaName(formatters, item.regionCode || order.regionCode),
     item.itemName || '',
@@ -88,12 +117,13 @@ function keywordSheet(order: Order, formatters: OrderDetailExportFormatters): Sh
 }
 
 function downloadSheet(order: Order, formatters: OrderDetailExportFormatters): SheetConfig {
-  const rows = dateRange(order).flatMap((date) => order.items.map((item) => [
+  const dates = dateRange(order)
+  const rows = dates.flatMap((date, index) => order.items.map((item) => [
     formatters.storeLabel(order.storeType),
     date,
     order.appIdentifier,
     areaName(formatters, item.regionCode || order.regionCode),
-    dailyDownloadCount(item, order)
+    splitTotalCount(item.quantity, dates.length, index)
   ]))
   return {
     name: 'Download details',
@@ -104,13 +134,14 @@ function downloadSheet(order: Order, formatters: OrderDetailExportFormatters): S
 
 function scoreSheet(order: Order, formatters: OrderDetailExportFormatters): SheetConfig {
   const grouped = groupScoreItems(order)
-  const rows = dateRange(order).flatMap((date) => Object.values(grouped).map((group) => [
+  const dates = dateRange(order)
+  const rows = dates.flatMap((date, index) => Object.values(grouped).map((group) => [
     formatters.storeLabel(order.storeType),
     date,
     order.appIdentifier,
     areaName(formatters, group.regionCode || order.regionCode),
-    group.star5,
-    group.star4
+    splitTotalCount(group.star5, dates.length, index),
+    splitTotalCount(group.star4, dates.length, index)
   ]))
   return {
     name: order.orderType === 'REVIEW' ? 'Comment details' : 'Score details',
@@ -120,17 +151,16 @@ function scoreSheet(order: Order, formatters: OrderDetailExportFormatters): Shee
 }
 
 function groupScoreItems(order: Order) {
-  const days = Math.max(dateRange(order).length, 1)
   return order.items.reduce<Record<string, { regionCode: string | null, star5: number, star4: number }>>((result, item) => {
     const key = item.regionCode || order.regionCode || ''
     if (!result[key]) {
       result[key] = { regionCode: item.regionCode || order.regionCode, star5: 0, star4: 0 }
     }
     if (item.itemType === 'RATING_5' || item.itemType === 'REVIEW_5') {
-      result[key].star5 += dailyScoreCount(item, order.orderType, days)
+      result[key].star5 += item.quantity ?? 0
     }
     if (item.itemType === 'RATING_4' || item.itemType === 'REVIEW_4') {
-      result[key].star4 += dailyScoreCount(item, order.orderType, days)
+      result[key].star4 += item.quantity ?? 0
     }
     return result
   }, {})
@@ -141,34 +171,10 @@ function areaName(formatters: OrderDetailExportFormatters, code?: string | null)
   return label.replace(/\s*\([^)]*\)\s*$/, '')
 }
 
-function dailyDownloadCount(item: OrderItem, order: Order) {
-  const metadata = parseMetadata(item.metadataJson)
-  if (typeof metadata.dailyDownloadCount === 'number') {
-    return metadata.dailyDownloadCount
-  }
-  return splitTotalCount(item.quantity, Math.max(dateRange(order).length, 1))
-}
-
-function dailyScoreCount(item: OrderItem, orderType: OrderType, days: number) {
-  if (orderType === 'RATING') {
-    return splitTotalCount(item.quantity, days)
-  }
-  return splitTotalCount(item.quantity, days)
-}
-
-function splitTotalCount(total: number | null | undefined, days: number) {
-  if (!total) return 0
-  return Math.round(total / Math.max(days, 1))
-}
-
-function parseMetadata(value?: string | null) {
-  if (!value) return {} as Record<string, unknown>
-  try {
-    const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
-  } catch {
-    return {}
-  }
+// Distribute the remainder without changing the edited order's total quantity.
+function splitTotalCount(total: number | null | undefined, days: number, index: number) {
+  const count = Math.max(0, total ?? 0)
+  return Math.floor(count / days) + (index < count % days ? 1 : 0)
 }
 
 function dateRange(order: Order) {
@@ -187,7 +193,7 @@ function dateRange(order: Order) {
 function parseDate(value?: string | null) {
   const text = dateOnly(value)
   if (!text) return null
-  const date = new Date(`${text}T00:00:00`)
+  const date = new Date(`${text}T00:00:00Z`)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
@@ -197,7 +203,7 @@ function dateOnly(value?: string | null) {
 
 function formatDate(value: Date) {
   const pad = (part: number) => String(part).padStart(2, '0')
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+  return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`
 }
 
 function executionHoursText(value?: number | null) {
@@ -206,7 +212,8 @@ function executionHoursText(value?: number | null) {
 }
 
 async function createExcelWorkbook() {
-  const ExcelJS = await import('exceljs')
+  const module = await import('exceljs')
+  const ExcelJS = module.default ?? module
   return new ExcelJS.Workbook()
 }
 

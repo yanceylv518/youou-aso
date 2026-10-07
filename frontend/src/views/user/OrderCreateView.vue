@@ -7,13 +7,17 @@
             {{ t('orderCreate.backToList') }}
           </el-button>
         </div>
+        <el-alert v-if="originalEditingStatus === 'CANCELLED'" :title="t('orderCreate.cancelledOrderEditHint')" type="info" :closable="false" show-icon />
         <div class="order-workspace">
           <main class="order-main">
             <section class="form-section">
               <div class="section-heading">
-                <h2><span>* 1.</span> {{ t('orderCreate.serviceSection') }}</h2>
+                <h2><span aria-hidden="true">*</span> {{ t('orderCreate.serviceSection') }}</h2>
               </div>
-              <div class="type-tabs">
+              <el-select class="mobile-service-select" v-model="selectedOrderModuleTab" :aria-label="t('visual.switchService')">
+                  <el-option v-for="module in availableOrderModules" :key="module.id" :value="String(module.id)" :label="moduleLocalizedName(module)" />
+                </el-select>
+                <div class="type-tabs">
                 <el-tabs v-model="selectedOrderModuleTab">
                   <el-tab-pane
                     v-for="module in availableOrderModules"
@@ -44,16 +48,16 @@
 
             <section class="form-section">
               <div class="section-heading">
-                <h2><span>* 2.</span> {{ t('orderCreate.store') }}</h2>
+                <h2><span aria-hidden="true">*</span> {{ t('orderCreate.store') }}</h2>
               </div>
               <el-radio-group v-model="form.storeType" class="store-switch">
-                <el-radio-button value="APP_STORE">
+                <el-radio-button v-if="availableStores.includes('APP_STORE')" value="APP_STORE">
                   <span class="store-option"><StoreIcon store-type="APP_STORE" size="sm" /> App Store</span>
                 </el-radio-button>
-                <el-radio-button value="GOOGLE_PLAY">
+                <el-radio-button v-if="availableStores.includes('GOOGLE_PLAY')" value="GOOGLE_PLAY">
                   <span class="store-option"><StoreIcon store-type="GOOGLE_PLAY" size="sm" /> Google Play</span>
                 </el-radio-button>
-                <el-radio-button value="IPAD_STORE">
+                <el-radio-button v-if="availableStores.includes('IPAD_STORE')" value="IPAD_STORE">
                   <span class="store-option"><StoreIcon store-type="IPAD_STORE" size="sm" /> iPad Store</span>
                 </el-radio-button>
               </el-radio-group>
@@ -61,7 +65,7 @@
 
             <section class="form-section">
               <div class="section-heading">
-                <h2><span>* 3.</span> {{ t('orderCreate.app') }}</h2>
+                <h2><span aria-hidden="true">*</span> {{ t('orderCreate.app') }}</h2>
               </div>
               <div class="app-picker-line">
                 <el-select
@@ -93,7 +97,7 @@
               class="form-section"
             >
               <div class="section-heading">
-                <h2><span>* 4.</span> {{ t('applications.region') }}</h2>
+                <h2><span aria-hidden="true">*</span> {{ t('applications.region') }}</h2>
               </div>
               <div class="single-control">
                 <el-select
@@ -129,17 +133,25 @@
               <div class="step-field-grid">
                 <div class="step-field">
                   <div class="section-heading">
-                    <h2><span>* {{ form.orderType === 'KEYWORD_INSTALL' ? 4 : 5 }}.</span> {{ t('orderCreate.orderDate') }}</h2>
+                    <h2><span aria-hidden="true">*</span> {{ t(form.orderType === 'KEYWORD_INSTALL' ? 'ordersPage.orderTime' : 'orderCreate.orderDate') }}</h2>
                   </div>
+                  <el-radio-group v-if="form.orderType === 'KEYWORD_INSTALL'" v-model="keywordStartMode" class="keyword-start-mode" :aria-label="t('visual.startMode')">
+                    <el-radio-button value="immediate">{{ t('visual.startImmediately') }}</el-radio-button>
+                    <el-radio-button value="scheduled">{{ t('visual.startScheduled') }}</el-radio-button>
+                  </el-radio-group>
+                  <p v-if="form.orderType === 'KEYWORD_INSTALL' && keywordStartMode === 'immediate'" class="keyword-start-hint">{{ t('visual.immediateStartHint') }}</p>
                   <el-date-picker
-                    v-if="form.orderType === 'KEYWORD_INSTALL'"
-                    v-model="keywordInstallDate"
-                    type="date"
-                    value-format="YYYY-MM-DD"
-                    :placeholder="t('orderCreate.selectOrderDate')"
+                    v-if="form.orderType === 'KEYWORD_INSTALL' && keywordStartMode === 'scheduled'"
+                    v-model="keywordInstallDateTime"
+                    type="datetime"
+                    format="YYYY-MM-DD HH:mm"
+                    time-format="HH:mm"
+                    value-format="YYYY-MM-DDTHH:mm"
+                    :placeholder="t('orderCreate.selectOrderDateTime')"
+                    :disabled-date="disabledKeywordOrderDate"
                   />
                   <el-date-picker
-                    v-else
+                    v-if="form.orderType !== 'KEYWORD_INSTALL'"
                     v-model="dateRange"
                     type="daterange"
                     value-format="YYYY-MM-DD"
@@ -147,9 +159,12 @@
                     :start-placeholder="t('ordersPage.startDate')"
                     :end-placeholder="t('ordersPage.endDate')"
                   />
+                  <p v-if="form.orderType === 'KEYWORD_INSTALL' && keywordTimeInPast" class="order-time-error">
+                    {{ t('orderCreate.keywordOrderTimePast') }}
+                  </p>
                 </div>
                 <div class="system-time">
-                  <span>System Time (UTC+8):</span>
+                  <span>{{ t('visual.systemTime') }}</span>
                   <strong>{{ systemTimeText }}</strong>
                 </div>
               </div>
@@ -157,7 +172,7 @@
 
             <section v-if="form.orderType === 'KEYWORD_INSTALL'" class="form-section">
               <div class="section-heading">
-                <h2><span>* 5.</span> {{ t('orderCreate.executionHours') }}</h2>
+                <h2><span aria-hidden="true">*</span> {{ t('orderCreate.executionHours') }}</h2>
               </div>
               <div class="single-control">
                 <el-select v-model="form.executionHours" :placeholder="t('orderCreate.executionHours')">
@@ -168,7 +183,7 @@
 
             <section v-if="form.orderType === 'KEYWORD_INSTALL'" class="form-section">
               <div class="section-heading section-heading-actions">
-                <h2><span>* 6.</span> {{ t('orderCreate.regionKeywords') }}</h2>
+                <h2><span aria-hidden="true">*</span> {{ t('orderCreate.regionKeywords') }}</h2>
                 <div class="region-tool-buttons">
                   <el-button size="small" type="primary" :icon="Download" @click="downloadKeywordTemplate">
                     {{ t('orderCreate.downloadTemplate') }}
@@ -298,7 +313,7 @@
             <section v-else class="form-section">
               <div class="section-heading">
                 <h2>
-                  <span>* {{ ['DOWNLOAD', 'RATING', 'REVIEW'].includes(form.orderType) ? 7 : isSpecialOrder ? 5 : 6 }}.</span>
+                  <span aria-hidden="true">*</span>
                   {{
                     form.orderType === 'DOWNLOAD'
                       ? t('orderCreate.regionDownloads')
@@ -466,10 +481,10 @@
                           </el-button>
                         </div>
                       </div>
-                      <div class="special-item-table">
+                      <div class="special-item-table" :class="{ 'coverage-keyword-table': form.orderType === 'KEYWORD_COVERAGE' }">
                         <div class="special-item-head">
                           <span>{{ form.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keywords') }}</span>
-                          <span>{{ isRankGuaranteeType(form.orderType) ? t('orderCreate.targetRank') : t('orderCreate.currentRank') }}</span>
+                          <span v-if="isRankGuaranteeType(form.orderType)">{{ t('orderCreate.targetRank') }}</span>
                           <span>{{ t('applications.actions') }}</span>
                           <span></span>
                         </div>
@@ -488,12 +503,6 @@
                               :value="option.value"
                             />
                           </el-select>
-                          <el-input
-                            v-else
-                            v-model.trim="item.coverageNote"
-                            maxlength="120"
-                            :placeholder="t('orderCreate.currentRankPlaceholder')"
-                          />
                           <div class="keyword-action-cell">
                             <el-button
                               type="danger"
@@ -515,6 +524,16 @@
                               @click="addSpecialItem(groupIndex)"
                             >
                               {{ form.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.addChartType') : t('orderCreate.addKeyword') }}
+                            </el-button>
+                            <el-button
+                              v-if="index === 0 && form.orderType === 'KEYWORD_COVERAGE'"
+                              size="small"
+                              text
+                              :icon="Plus"
+                              class="add-keyword-button"
+                              @click="openBatchKeywordDialog(groupIndex, 'coverage')"
+                            >
+                              {{ t('orderCreate.batchKeywordImport') }}
                             </el-button>
                           </div>
                         </div>
@@ -585,7 +604,7 @@
             </div>
             <div class="billing-note">
               <strong>{{ t('orderCreate.billingNoteTitle') }}</strong>
-              <span>{{ t('orderCreate.billingNote') }}</span>
+              <span>{{ t(isSpecialOrder ? 'visual.billingQuote' : form.orderType === 'REVIEW' ? 'visual.billingReview' : 'visual.billingQuantity') }}</span>
             </div>
             <div class="billing-breakdown">
               <div class="breakdown-title">{{ t('orderCreate.billingDetails') }}</div>
@@ -626,14 +645,14 @@
       @closed="batchKeywordText = ''"
     >
       <div class="batch-keyword-body">
-        <p class="batch-keyword-tip">{{ t('orderCreate.batchKeywordDialogTip') }}</p>
+        <p class="batch-keyword-tip">{{ t(batchKeywordMode === 'coverage' ? 'orderCreate.batchCoverageKeywordDialogTip' : 'orderCreate.batchKeywordDialogTip') }}</p>
         <el-input
           v-model="batchKeywordText"
           class="batch-keyword-input"
           type="textarea"
-          :rows="12"
+          :autosize="{ minRows: 7, maxRows: 10 }"
           resize="vertical"
-          :placeholder="t('orderCreate.batchKeywordPlaceholder')"
+          :placeholder="t(batchKeywordMode === 'coverage' ? 'orderCreate.batchCoverageKeywordPlaceholder' : 'orderCreate.batchKeywordPlaceholder')"
         />
       </div>
       <template #footer>
@@ -645,6 +664,9 @@
 </template>
 
 <script setup lang="ts">
+import { formatCurrency } from '@/utils/presentation'
+import { defaultKeywordOrderTime, businessMinute, keywordOrderTimeIsPast } from '@/utils/orderTime'
+
 import { uploadReviewAttachment, downloadReviewAttachment, type ReviewAttachment } from '@/api/reviewAttachments'
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -658,6 +680,7 @@ import { getCustomerOrderModules, type OrderModuleConfig } from '@/api/orderModu
 import { getCustomerSpecialAudits, submitSpecialAudit, type SpecialOrderAudit } from '@/api/specialOrderAudits'
 import StoreIcon from '@/components/StoreIcon.vue'
 import { useWalletStore } from '@/stores/wallet'
+import { CoverageKeywordImportError, parseCoverageKeywordText } from '@/utils/coverageKeywords'
 
 interface OrderForm {
   orderType: OrderType
@@ -749,6 +772,7 @@ const reviewImportGroupIndex = ref<number | null>(null)
 const batchKeywordDialogVisible = ref(false)
 const batchKeywordText = ref('')
 const batchKeywordGroupIndex = ref<number | null>(null)
+const batchKeywordMode = ref<'install' | 'coverage'>('install')
 const apps = ref<CustomerApp[]>([])
 const regions = ref<MarketRegion[]>([])
 const orderModules = ref<OrderModuleConfig[]>([])
@@ -762,7 +786,8 @@ const regionCodeAliases: Record<string, string> = {
   '俄罗斯': 'RU'
 }
 const dateRange = ref<[string, string] | ''>([today(), today()])
-const keywordInstallDate = ref(today())
+const keywordStartMode = ref<'immediate' | 'scheduled'>('immediate')
+const keywordInstallDateTime = ref(defaultKeywordOrderTime())
 const systemNow = ref(new Date())
 let systemTimer: number | undefined
 const priceMap = reactive<Record<PriceCode, number>>({
@@ -813,10 +838,10 @@ const services: ServiceOption[] = [
 const filteredApps = computed(() => apps.value.filter((app) => app.storeType === form.storeType))
 const selectedApp = computed(() => filteredApps.value.find((app) => app.id === form.customerAppId) || null)
 const selectedAppRegions = computed(() => {
-  const allowed = regionPricing.value.find(item => item.orderType === form.orderType)?.allowedRegionCodes
+  const allowed = regionPricing.value.find(item => item.orderModuleId === selectedOrderModuleId.value)?.allowedRegionCodes
   return regions.value
     .filter((region) => supportsStore(region, form.storeType))
-    .filter((region) => !allowed || allowed.includes(region.code))
+    .filter((region) => Boolean(allowed?.includes(region.code)))
 })
 const selectedAppRegionCodes = computed(() => {
   return selectedAppRegions.value
@@ -950,6 +975,12 @@ const availableOrderModules = computed(() => orderModules.value
   .slice()
   .sort((left, right) => left.sortOrder - right.sortOrder || left.id - right.id))
 const selectedOrderModule = computed(() => orderModules.value.find((module) => module.id === selectedOrderModuleId.value && module.enabled && module.orderType === form.orderType) || null)
+const availableStores = computed(() => selectedOrderModule.value?.storeTypes || [])
+watch(selectedOrderModule, () => {
+  if (hydratingOrder || !selectedOrderModule.value) return
+  if (!availableStores.value.includes(form.storeType) && availableStores.value[0]) form.storeType = availableStores.value[0]
+  setDefaultRegions()
+}, { flush: 'sync' })
 const selectedOrderModuleTab = computed({
   get: () => selectedOrderModuleId.value === null ? '' : String(selectedOrderModuleId.value),
   set: (value: string) => {
@@ -960,7 +991,7 @@ const selectedOrderModuleTab = computed({
   }
 })
 function effectivePrice(code: PriceCode, regionCode = selectedPricingRegionCodes.value[0] || '') {
-  const override = regionPricing.value.find(item => item.orderType === form.orderType)?.regionPrices?.[code]?.[regionCode]
+  const override = regionPricing.value.find(item => item.orderModuleId === selectedOrderModuleId.value)?.regionPrices?.[code]?.[regionCode]
   if (override !== undefined && override !== null) return Number(override)
   if (selectedOrderModule.value && !isSpecialOrder.value) {
     return Number(regionCode === 'CN' ? selectedOrderModule.value.chinaUnitPrice : selectedOrderModule.value.unitPrice) || 0
@@ -1005,14 +1036,14 @@ const billingLines = computed<BillingLine[]>(() => {
   if (form.orderType === 'KEYWORD_INSTALL') {
     return [{
       label: selectedOrderModule.value ? moduleLocalizedName(selectedOrderModule.value) : t('ordersPage.types.KEYWORD_INSTALL'),
-      formula: `${t('orderCreate.keywordCount')} ${quantity.value} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('KEYWORD_INSTALL'))}`,
+      formula: `${t('orderCreate.keywordCount')} ${quantity.value} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('KEYWORD_INSTALL'), 4)}`,
       amount: money(estimatedAmount.value)
     }]
   }
   if (form.orderType === 'DOWNLOAD') {
     return [{
       label: selectedOrderModule.value ? moduleLocalizedName(selectedOrderModule.value) : t('ordersPage.types.DOWNLOAD'),
-      formula: `${t('orderCreate.days')} ${totalDays.value} × ${t('orderCreate.dailyDownloadCount')} ${totalDailyDownloadCount.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('DOWNLOAD'))}`,
+      formula: `${t('orderCreate.days')} ${totalDays.value} × ${t('orderCreate.dailyDownloadCount')} ${totalDailyDownloadCount.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('DOWNLOAD'), 4)}`,
       amount: money(estimatedAmount.value)
     }]
   }
@@ -1020,12 +1051,12 @@ const billingLines = computed<BillingLine[]>(() => {
     return [
       {
         label: t('orderCreate.rating5Count'),
-        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('RATING_5'))}`,
+        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('RATING_5'), 4)}`,
         amount: money(totalDays.value * (totalRating5Count.value || 0) * effectivePrice('RATING_5'))
       },
       {
         label: t('orderCreate.rating4Count'),
-        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('RATING_4'))}`,
+        formula: `${t('orderCreate.days')} ${totalDays.value} × ${totalRating4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('RATING_4'), 4)}`,
         amount: money(totalDays.value * (totalRating4Count.value || 0) * effectivePrice('RATING_4'))
       }
     ]
@@ -1034,12 +1065,12 @@ const billingLines = computed<BillingLine[]>(() => {
     return [
       {
         label: t('orderCreate.review5Count'),
-        formula: `${totalReview5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('REVIEW_5'))}`,
+        formula: `${totalReview5Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('REVIEW_5'), 4)}`,
         amount: money((totalReview5Count.value || 0) * effectivePrice('REVIEW_5'))
       },
       {
         label: t('orderCreate.review4Count'),
-        formula: `${totalReview4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('REVIEW_4'))}`,
+        formula: `${totalReview4Count.value || 0} × ${t('orderCreate.unitPrice')} ${money(effectivePrice('REVIEW_4'), 4)}`,
         amount: money((totalReview4Count.value || 0) * effectivePrice('REVIEW_4'))
       }
     ]
@@ -1050,10 +1081,15 @@ const billingLines = computed<BillingLine[]>(() => {
     amount: t('promotionPage.auditBadge')
   }]
 })
+const keywordTimeInPast = computed(() => keywordStartMode.value === 'scheduled' && keywordOrderTimeIsPast(keywordInstallDateTime.value, systemNow.value))
+function disabledKeywordOrderDate(date: Date) {
+  const localDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return localDate < businessMinute().slice(0, 10)
+}
 const submitDisabled = computed(() => {
   if (submitting.value || !selectedApp.value) return true
   if (isSpecialOrder.value) return specialItems.value.length === 0
-  if (form.orderType === 'KEYWORD_INSTALL') return !keywordInstallDate.value || quantity.value <= 0
+  if (form.orderType === 'KEYWORD_INSTALL') return (keywordStartMode.value === 'scheduled' && (!keywordInstallDateTime.value || keywordTimeInPast.value)) || quantity.value <= 0
   return !dateRange.value || quantity.value <= 0
 })
 const systemTimeText = computed(() => formatSystemTime(systemNow.value))
@@ -1146,6 +1182,10 @@ async function loadData() {
 
 async function submitOrder() {
   if (reviewUploading.value) return
+  if (form.orderType === 'KEYWORD_INSTALL' && keywordStartMode.value === 'scheduled' && keywordOrderTimeIsPast(keywordInstallDateTime.value)) {
+    ElMessage.warning(t('orderCreate.keywordOrderTimePast'))
+    return
+  }
   if (!selectedApp.value || (!isSpecialOrder.value && !selectedOrderDates())) {
     ElMessage.warning(t('orderCreate.requiredFields'))
     return
@@ -1166,6 +1206,7 @@ async function submitOrder() {
     submitting.value = true
     try {
       await submitSpecialAudit({
+        orderModuleId: selectedOrderModule.value?.id,
         customerAppId: selectedApp.value.id,
         regionCode: specialItems.value[0]?.regionCode || form.regionCode,
         orderType: form.orderType,
@@ -1202,7 +1243,7 @@ async function submitOrder() {
       return
     }
     const order = editingId
-      ? payloadSnapshot === originalPayloadSnapshot.value
+      ? originalEditingStatus.value === 'PENDING_PAYMENT' && payloadSnapshot === originalPayloadSnapshot.value
         ? await payCustomerOrder(editingId)
         : await resubmitCustomerOrder(editingId, payload)
       : await createCustomerOrder(payload)
@@ -1235,7 +1276,8 @@ async function refreshWalletSilently() {
 }
 function selectedOrderDates(): [string, string] | null {
   if (form.orderType === 'KEYWORD_INSTALL') {
-    return keywordInstallDate.value ? [keywordInstallDate.value, keywordInstallDate.value] : null
+    if (keywordStartMode.value === 'immediate') { const today = businessMinute().slice(0, 10); return [today, today] }
+    return keywordInstallDateTime.value ? [keywordInstallDateTime.value.slice(0, 10), keywordInstallDateTime.value.slice(0, 10)] : null
   }
   return dateRange.value || null
 }
@@ -1256,6 +1298,8 @@ function buildCustomerOrderPayload(): CreateOrderPayload | null {
     orderModuleId: selectedOrderModule.value?.id || null,
     startDate,
     endDate,
+    scheduledStartAt: form.orderType === 'KEYWORD_INSTALL' && keywordStartMode.value === 'scheduled' ? keywordInstallDateTime.value : null,
+    startImmediately: form.orderType === 'KEYWORD_INSTALL' && keywordStartMode.value === 'immediate',
     executionHours: form.orderType === 'KEYWORD_INSTALL' ? form.executionHours : null,
     keywords: [],
     keywordItems: form.orderType === 'KEYWORD_INSTALL' ? keywordItems.value : [],
@@ -1414,8 +1458,10 @@ function removeKeywordItem(groupIndex: number, index: number) {
   group.keywordItems.splice(index, 1)
 }
 
-function openBatchKeywordDialog(groupIndex: number) {
-  if (!form.regionGroups[groupIndex]) return
+function openBatchKeywordDialog(groupIndex: number, mode: 'install' | 'coverage' = 'install') {
+  const group = mode === 'coverage' ? form.specialGroups[groupIndex] : form.regionGroups[groupIndex]
+  if (!group) return
+  batchKeywordMode.value = mode
   batchKeywordGroupIndex.value = groupIndex
   batchKeywordText.value = ''
   batchKeywordDialogVisible.value = true
@@ -1423,6 +1469,29 @@ function openBatchKeywordDialog(groupIndex: number) {
 
 function confirmBatchKeywordImport() {
   const groupIndex = batchKeywordGroupIndex.value
+  if (batchKeywordMode.value === 'coverage') {
+    const group = groupIndex === null ? undefined : form.specialGroups[groupIndex]
+    if (!group || form.orderType !== 'KEYWORD_COVERAGE') return
+    let keywords: string[]
+    try {
+      keywords = parseCoverageKeywordText(batchKeywordText.value)
+    } catch (error) {
+      if (!(error instanceof CoverageKeywordImportError)) throw error
+      ElMessage.warning(t('orderCreate.batchCoverageKeywordInvalidRow', { row: error.row }))
+      return
+    }
+    if (keywords.length === 0) {
+      ElMessage.warning(t('orderCreate.batchCoverageKeywordEmpty'))
+      return
+    }
+    const items = group.items.filter((item) => item.keyword.trim())
+    const existingKeywords = new Set(items.map((item) => item.keyword.trim()))
+    const newKeywords = keywords.filter((keyword) => !existingKeywords.has(keyword))
+    group.items = [...items, ...newKeywords.map((keyword) => ({ ...createSpecialItem(), keyword }))]
+    batchKeywordDialogVisible.value = false
+    ElMessage.success(t('orderCreate.batchKeywordImportSuccess', { count: newKeywords.length }))
+    return
+  }
   const group = groupIndex === null ? undefined : form.regionGroups[groupIndex]
   if (!group) return
   let parsedItems: KeywordInput[]
@@ -1577,17 +1646,17 @@ async function downloadReviewTemplate() {
   workbook.created = new Date()
   const sheet = workbook.addWorksheet('Review Import')
   sheet.columns = [
-    { header: t('orderCreate.reviewTitle'), key: 'reviewTitle', width: 32 },
-    { header: t('orderCreate.reviewContent'), key: 'reviewContent', width: 56 }
+    ...(form.storeType === 'GOOGLE_PLAY' ? [] : [{ header: 'Review Title', key: 'reviewTitle', width: 32 }]),
+    { header: 'Review', key: 'reviewContent', width: 96 }
   ]
   sheet.getRow(1).font = { bold: true }
   sheet.addRow({
-    reviewTitle: t('orderCreate.reviewTemplateExampleTitle'),
-    reviewContent: t('orderCreate.reviewTemplateExampleContent')
+    reviewTitle: 'Great',
+    reviewContent: 'The app is easy to operate and runs smoothly. Overall, the experience is great.'
   })
   sheet.addRow({
-    reviewTitle: t('orderCreate.reviewTemplateExampleTitle2'),
-    reviewContent: t('orderCreate.reviewTemplateExampleContent2')
+    reviewTitle: 'Nice',
+    reviewContent: 'Practical functions with a clear interface, making it very user-friendly.'
   })
   const buffer = await workbook.xlsx.writeBuffer()
   downloadBlobFile(
@@ -1820,7 +1889,7 @@ async function applyPendingOrderQuery() {
   }
   try {
     const order = await getCustomerOrder(queryOrderId)
-    if (!['PENDING_PAYMENT', 'PENDING_CONFIRM'].includes(order.status) || order.sourceAuditId) {
+    if (!['PENDING_PAYMENT', 'PENDING_CONFIRM', 'CANCELLED'].includes(order.status) || order.sourceAuditId) {
       ElMessage.warning(t('ordersPage.onlyUnconfirmedEditable'))
       editingOrderId.value = null
       hydratedOrderId.value = null
@@ -1890,7 +1959,8 @@ async function loadRenewSourceAudit(sourceAuditId: number) {
 
 function resetRenewOrderDate(orderType: OrderType) {
   if (orderType === 'KEYWORD_INSTALL') {
-    keywordInstallDate.value = today()
+    keywordStartMode.value = 'immediate'
+    keywordInstallDateTime.value = defaultKeywordOrderTime()
     return
   }
   dateRange.value = ''
@@ -1906,7 +1976,8 @@ function hydratePendingPaymentOrder(order: Order) {
     form.regionCode = order.regionCode === 'MULTI' ? '' : order.regionCode || ''
     form.executionHours = order.executionHours || 1
     if (order.orderType === 'KEYWORD_INSTALL') {
-      keywordInstallDate.value = order.orderStartDate
+      keywordStartMode.value = 'scheduled'
+      keywordInstallDateTime.value = order.scheduledStartAt?.replace(' ', 'T').slice(0, 16) || `${order.orderStartDate}T00:00`
     } else {
       dateRange.value = [order.orderStartDate, order.orderEndDate]
     }
@@ -2064,9 +2135,7 @@ function typeLabel(type?: OrderType | null) {
   return type ? t(`ordersPage.types.${type}`) : '-'
 }
 
-function money(value: number) {
-  return `$${Number(value).toFixed(2)}`
-}
+const money = formatCurrency
 
 function storeLabel(storeType: StoreType) {
   if (storeType === 'GOOGLE_PLAY') return 'Google Play'
@@ -2083,7 +2152,7 @@ function today() {
 }
 
 function formatSystemTime(date: Date) {
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat(locale.value, {
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: '2-digit',
@@ -2091,15 +2160,16 @@ function formatSystemTime(date: Date) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: true
+    hour12: false
   })
   const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]))
-  return `${parts.year}-${parts.month}-${parts.day}, ${parts.hour}:${parts.minute}:${parts.second} ${parts.dayPeriod}`
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
 }
 
 function errorMessage(error: unknown, fallback: string) {
   if (typeof error === 'object' && error !== null && 'response' in error) {
     const response = (error as { response?: { data?: { code?: string; message?: string } } }).response
+    if (response?.data?.code === 'ORDER_TIME_IN_PAST') return t('orderCreate.keywordOrderTimePast')
     if (response?.data?.code === 'BALANCE_NOT_ENOUGH') return t('orderCreate.balanceNotEnough')
     if (response?.data?.code === 'PRICE_NOT_CONFIGURED') return t('orderCreate.priceNotConfigured')
     if (response?.data?.code === 'PRICE_DISABLED') return t('orderCreate.priceDisabled')
@@ -2110,6 +2180,7 @@ function errorMessage(error: unknown, fallback: string) {
 </script>
 
 <style scoped>
+.order-time-error { margin: 8px 0 0; color: var(--el-color-danger); font-size: 12px; }
 .review-attachments { padding: 16px; }
 .review-attachments p { color: #909399; font-size: 13px; }
 .review-attachment-row { display: flex; align-items: center; gap: 16px; padding: 6px 0; overflow-wrap: anywhere; }
@@ -2778,6 +2849,11 @@ function errorMessage(error: unknown, fallback: string) {
   grid-template-columns: minmax(220px, 1fr) 180px 64px minmax(140px, 1fr);
 }
 
+.coverage-keyword-table .special-item-head,
+.coverage-keyword-table .special-item-row {
+  grid-template-columns: minmax(220px, 1fr) 64px minmax(220px, 1fr);
+}
+
 .review-detail-head,
 .special-item-head {
   background: #f7faff;
@@ -3151,6 +3227,11 @@ function errorMessage(error: unknown, fallback: string) {
     min-width: 720px;
   }
 
+  .coverage-keyword-table .special-item-head,
+  .coverage-keyword-table .special-item-row {
+    min-width: 520px;
+  }
+
   .contact-grid {
     grid-template-columns: 1fr;
     padding: 12px 12px 0;
@@ -3184,6 +3265,25 @@ function errorMessage(error: unknown, fallback: string) {
     width: 100%;
   }
 }
+
+.mobile-service-select { display:none; }
+.order-main { container-type:inline-size; }
+.step-field-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.step-field, .app-picker-line { min-width:0; max-width:100%; }
+.app-picker-line > .el-select { min-width:0; width:100%; }
+@container (max-width:620px) { .step-field-grid { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:700px) {
+ .mobile-service-select { display:block; width:100%; }
+ .type-tabs, .selected-module-card { display:none; }
+ .store-switch { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%; }
+ .store-switch :deep(.el-radio-button), .store-switch :deep(.el-radio-button__inner) { width:100%; min-width:0; }
+ .store-switch :deep(.el-radio-button__inner) { padding:10px 3px; font-size:11px; }
+ .store-option { gap:3px; }
+ .flow-section { margin-bottom:20px; }
+}
+
+.keyword-start-mode { display:flex; flex-wrap:wrap; margin-bottom:12px; }
+.keyword-start-hint { margin:0; color:#64748b; line-height:1.6; font-size:13px; }
 </style>
 
 

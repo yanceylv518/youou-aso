@@ -1,6 +1,6 @@
 <template>
   <section class="auth-page">
-    <el-form class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
+    <el-form ref="formRef" :rules="rules" scroll-to-error class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
       <div class="auth-brand">
         <img class="brand-mark" :src="systemLogo" alt="" />
         <span>{{ t('app.name') }}</span>
@@ -9,14 +9,15 @@
         <h1>{{ t('auth.registerTitle') }}</h1>
         <p>{{ t('auth.registerSubtitle') }}</p>
       </header>
-      <el-form-item :label="t('auth.username')">
+      <el-form-item prop="username" :label="t('auth.username')">
         <el-input v-model="form.username" autocomplete="username" size="large" />
       </el-form-item>
-      <el-form-item :label="t('auth.email')">
+      <el-form-item prop="email" :label="t('auth.email')">
         <el-input v-model="form.email" autocomplete="email" size="large" />
       </el-form-item>
-      <el-form-item :label="t('auth.password')">
+      <el-form-item prop="password" :label="t('auth.password')">
         <el-input v-model="form.password" type="password" autocomplete="new-password" show-password size="large" />
+      <small class="password-hint">{{ t('auth.passwordTooShort') }}</small>
       </el-form-item>
       <el-button type="primary" native-type="submit" class="full-width" size="large" :loading="loading">
         {{ t('auth.registerButton') }}
@@ -30,6 +31,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed, nextTick } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -58,7 +61,21 @@ function getErrorMessage(error: unknown) {
   return t('auth.registerFailed')
 }
 
+
+const formRef = ref<FormInstance>()
+const rules = computed<FormRules>(() => ({
+  username: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }],
+  email: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }, { type:'email', message:t('auth.invalidEmail'), trigger:'blur' }],
+  password: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }, { min:8, message:t('auth.passwordTooShort'), trigger:'blur' }],
+}))
+async function validateForm() {
+ const valid = await formRef.value?.validate().catch(() => false)
+ if(!valid){await nextTick();formRef.value?.$el.querySelector('.is-error input')?.focus()}
+ return valid
+}
+
 async function submit() {
+  if (!await validateForm()) return
   const username = form.username.trim()
   const email = form.email.trim()
   if (!username || !email || !form.password) {
@@ -201,5 +218,6 @@ h1 {
     padding: 26px;
   }
 }
+.password-hint { display:block; color:#64748b; margin-top:6px; line-height:1.5; }
 </style>
 

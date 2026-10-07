@@ -1,3 +1,4 @@
+import { visualMessages } from './visual'
 import { createI18n } from 'vue-i18n'
 import zhCN from './locales/zh-CN'
 import enUS from './locales/en-US'
@@ -48,7 +49,7 @@ if (typeof document !== 'undefined') {
   document.documentElement.lang = localeHtmlLang[initialLocale]
 }
 
-export const localeMessages = { 'zh-CN': zhCN, 'en-US': enUS, 'ru-RU': ruRU, 'pt-PT': ptPT, 'es-ES': esES }
+export const localeMessages = { 'zh-CN': { ...zhCN, visual: visualMessages['zh-CN'] }, 'en-US': { ...enUS, visual: visualMessages['en-US'] }, 'ru-RU': { ...ruRU, visual: visualMessages['ru-RU'] }, 'pt-PT': { ...ptPT, visual: visualMessages['pt-PT'] }, 'es-ES': { ...esES, visual: visualMessages['es-ES'] } }
 validateLocaleMessages(localeMessages)
 
 export const i18n = createI18n({

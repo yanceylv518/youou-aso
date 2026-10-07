@@ -1,6 +1,7 @@
 <template>
   <section class="orders-page">
-    <div class="query-panel">
+    <div class="query-panel" :class="{ 'filters-expanded': filtersExpanded }">
+      <el-button class="mobile-filter-toggle" :aria-expanded="filtersExpanded" @click="filtersExpanded = !filtersExpanded">{{ t(filtersExpanded ? 'visual.collapse' : 'visual.filters') }} · {{ t('visual.filterCount', { count: activeFilterCount }) }}</el-button>
       <div class="query-grid">
         <label class="query-item keyword-item">
           <span>{{ t('ordersPage.contentFilter') }}</span>
@@ -98,12 +99,15 @@
 
     <div class="table-card">
       <el-table v-loading="loading" :data="orders" class="orders-table" :empty-text="t('ordersPage.empty')">
-        <el-table-column v-if="isColumnVisible('orderNo')" prop="orderNo" :label="t('ordersPage.orderNo')" min-width="150">
+        <el-table-column v-if="isMobile" :label="t('ordersPage.orderNo')" min-width="180">
+          <template #default="{row}"><div class="mobile-order-summary"><strong>{{row.appName}}</strong><span>{{row.orderNo}}</span><span>{{orderDateText(row)}}</span><el-tag class="order-status-tag" :type="statusTagType(row.status)">{{statusLabel(row.status)}}</el-tag><ReservedOrderTag :order="row" /></div></template>
+        </el-table-column>
+        <el-table-column v-if="!isMobile && isColumnVisible('orderNo')" prop="orderNo" :label="t('ordersPage.orderNo')" min-width="150">
           <template #default="{ row }">
             <span class="order-no">{{ row.orderNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('app')" :label="t('ordersPage.app')" min-width="210">
+        <el-table-column v-if="!isMobile && isColumnVisible('app')" :label="t('ordersPage.app')" min-width="210">
           <template #default="{ row }">
             <div class="app-cell">
               <div class="app-icon">
@@ -119,69 +123,72 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('appIdentifier')" prop="appIdentifier" :label="t('ordersPage.appIdentifier')" min-width="190" />
-        <el-table-column v-if="isColumnVisible('store')" :label="t('ordersPage.store')" min-width="120">
+        <el-table-column v-if="!isMobile && isColumnVisible('appIdentifier')" prop="appIdentifier" :label="t('ordersPage.appIdentifier')" min-width="190" />
+        <el-table-column v-if="!isMobile && isColumnVisible('store')" :label="t('ordersPage.store')" min-width="120">
           <template #default="{ row }">{{ storeLabel(row.storeType) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('region')" prop="regionCode" :label="t('ordersPage.region')" min-width="100" />
-        <el-table-column v-if="isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('region')" prop="regionCode" :label="t('ordersPage.region')" min-width="100" />
+        <el-table-column v-if="!isMobile && isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="170">
           <template #default="{ row }">
             <span class="date-range-text">{{ orderDateText(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
           <template #default="{ row }">{{ valueOrDash(row.totalDays) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('executionHours')" :label="t('orderDetail.executionHours')" min-width="120" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('executionHours')" :label="t('orderDetail.executionHours')" min-width="120" align="right">
           <template #default="{ row }">{{ valueOrDash(row.executionHours) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('quantity')" :label="t('ordersPage.quantity')" min-width="100" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('quantity')" :label="t('ordersPage.quantity')" min-width="100" align="right">
           <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
-          <template #default="{ row }">{{ money(row.unitPrice) }}</template>
+        <el-table-column v-if="!isMobile && isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
+          <template #default="{ row }">{{ formatCurrency(row.unitPrice, 4) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('amount')" :label="t('ordersPage.amount')" min-width="120" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('amount')" :label="t('ordersPage.amount')" min-width="120" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
           <template #default="{ row }">{{ money(row.refundAmount) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('taskType')" :label="t('ordersPage.taskType')" min-width="120">
+        <el-table-column v-if="!isMobile && isColumnVisible('taskType')" :label="t('ordersPage.taskType')" min-width="120">
           <template #default="{ row }">{{ orderTypeLabel(row) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('orderCategory')" :label="t('ordersPage.orderCategory')" min-width="110">
+        <el-table-column v-if="!isMobile && isColumnVisible('orderCategory')" :label="t('ordersPage.orderCategory')" min-width="110">
           <template #default="{ row }">{{ isAuditRow(row) || row.sourceAuditId ? t('ordersPage.categories.SPECIAL') : t('ordersPage.categories.REGULAR') }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="120" align="center">
+        <el-table-column v-if="!isMobile && isColumnVisible('status')" :label="t('ordersPage.status')" min-width="120" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
+            <div class="order-status-tags">
+              <el-tag class="order-status-tag" :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
+              <ReservedOrderTag :order="row" />
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.expectedCompletedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('confirmedAt')" :label="t('orderDetail.confirmedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('confirmedAt')" :label="t('orderDetail.confirmedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.confirmedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('executedAt')" :label="t('orderDetail.executedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('executedAt')" :label="t('orderDetail.executedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.executedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('completedAt')" :label="t('orderDetail.completedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('completedAt')" :label="t('orderDetail.completedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.completedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="150">
+        <el-table-column v-if="!isMobile && isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="150">
           <template #default="{ row }">
             <span class="datetime-text">{{ formatDateTime(row.createdAt) }}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('actions')" :label="t('ordersPage.actions')" width="190" fixed="right" align="center">
+        <el-table-column v-if="isMobile || isColumnVisible('actions')" :label="t('ordersPage.actions')" :width="isMobile ? 130 : 190" :fixed="isMobile ? false : 'right'" align="center">
           <template #default="{ row }">
-            <div class="row-actions">
+            <div class="order-row-actions">
               <el-button class="action-detail" size="small" text type="primary" :icon="View" @click="viewDetail(row)">
                 {{ t('ordersPage.actionDetail') }}
               </el-button>
-              <el-button v-if="canSubmitApprovedAudit(row)" size="small" text type="primary" :icon="Edit" @click="submitApprovedAudit(row)">
+              <el-button v-if="canSubmitApprovedAudit(row)" size="small" text type="primary" :icon="CreditCard" @click="submitApprovedAudit(row)">
                 {{ t('ordersPage.actionPaySubmit') }}
               </el-button>
               <el-button v-if="canEditOrder(row)" size="small" text type="primary" :icon="Edit" @click="editOrder(row)">
@@ -211,11 +218,19 @@
 </template>
 
 <script setup lang="ts">
+import { orderModuleLabel } from '@/utils/orderModuleLabel'
+import { useCompactLayout } from '@/composables/useCompactLayout'
+const isMobile = useCompactLayout()
+const filtersExpanded = ref(false)
+const activeFilterCount = computed(() => Object.entries(filters).filter(([key,v]) => key !== 'storeType' && v !== '' && v !== null && v !== undefined).length + (orderDateRange.value?.length ? 1 : 0) + (createdDateRange.value?.length ? 1 : 0))
+import { statusTone, formatCurrency } from '@/utils/presentation'
+import ReservedOrderTag from '@/components/ReservedOrderTag.vue'
+import { formatOrderSchedule } from '@/utils/orderTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Delete, Download, Edit, Plus, RefreshRight, Search, View } from '@element-plus/icons-vue'
+import { CreditCard, Delete, Download, Edit, Plus, RefreshRight, Search, View } from '@element-plus/icons-vue'
 import { getCustomerOrdersPage, type Order, type OrderListStatus, type OrderStatus, type OrderType } from '@/api/orders'
 import { getCustomerApps, type CustomerApp, type StoreType } from '@/api/applications'
 import TableColumnSettings, { type TableColumnOption } from '@/components/TableColumnSettings.vue'
@@ -428,7 +443,7 @@ function createOrder() {
 }
 
 function canEditOrder(order: OrderRow) {
-  return (order.status === 'PENDING_PAYMENT' || order.status === 'PENDING_CONFIRM') && !order.sourceAuditId
+  return (order.status === 'PENDING_PAYMENT' || order.status === 'PENDING_CONFIRM' || order.status === 'CANCELLED') && !order.sourceAuditId
 }
 
 function editOrder(order: OrderRow) {
@@ -577,7 +592,7 @@ function isRenewableOrderStatus(status: OrderListStatus) {
 }
 
 function orderDateText(row: OrderRow) {
-  return isAuditRow(row) ? '-' : `${row.orderStartDate} - ${row.orderEndDate}`
+  return isAuditRow(row) ? '-' : formatOrderSchedule(row)
 }
 
 function exportOrders() {
@@ -602,7 +617,7 @@ function typeLabel(type?: string | null) {
 }
 
 function orderTypeLabel(order: OrderRow) {
-  return order.orderModuleName?.trim() || typeLabel(order.orderType)
+  return orderModuleLabel(order)
 }
 
 function statusLabel(status?: OrderListStatus | null) {
@@ -653,22 +668,9 @@ function valueOrDash(value?: number | string | null) {
   return value === null || value === undefined || value === '' ? '-' : value
 }
 
-function money(value?: number | null) {
-  return value === null || value === undefined ? '-' : `$${Number(value).toFixed(2)}`
-}
+const money = formatCurrency
 
-function statusTagType(status?: OrderListStatus | null) {
-  if (status === 'PENDING_REVIEW') return 'warning'
-  if (status === 'APPROVED_WAIT_SUBMIT') return 'danger'
-  if (status === 'SUBMITTED') return 'info'
-  if (status === 'COMPLETED') return 'success'
-  if (status === 'EXECUTING') return 'primary'
-  if (status === 'PAUSED') return 'info'
-  if (status === 'PENDING_EXECUTION') return 'warning'
-  if (status === 'PENDING_PAYMENT') return 'danger'
-  if (status === 'CANCELLED') return 'danger'
-  return 'info'
-}
+const statusTagType = statusTone
 
 </script>
 
@@ -807,33 +809,13 @@ function statusTagType(status?: OrderListStatus | null) {
   line-height: 1.45;
 }
 
-.row-actions {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
-  justify-content: center;
-  gap: 6px 8px;
-  padding: 2px 0;
-}
 
-.row-actions :deep(.el-button) {
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  margin-left: 0;
-  padding: 5px 8px;
-  justify-content: center;
-}
 
-.row-actions :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
 
-.row-actions .action-detail {
-  border-radius: 6px;
-  background: #eff6ff;
-}
+
+
+
+
 
 .app-cell {
   display: flex;
@@ -1095,4 +1077,6 @@ function statusTagType(status?: OrderListStatus | null) {
   }
 }
 
+.mobile-order-summary{display:flex;align-items:flex-start;flex-direction:column;gap:6px;overflow-wrap:anywhere}.mobile-order-summary>span{font-size:12px}.mobile-order-summary .el-tag{max-width:100%;height:auto;white-space:normal}
+@media(max-width:700px){.query-panel:not(.filters-expanded) .query-actions>.el-button{width:auto;min-width:0;flex:1 1 0}}
 </style>

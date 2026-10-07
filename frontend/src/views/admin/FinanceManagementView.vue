@@ -1,10 +1,10 @@
 <template>
   <section class="finance-page">
-    <div class="finance-control-card">
+    <div class="finance-control-card" :class="{ 'recharge-controls': isRechargeRecordsPage }">
     <div class="toolbar">
-      <p class="page-note">{{ pageCopy.subtitle }}</p>
+      <p v-if="!isRechargeRecordsPage" class="page-note">{{ pageCopy.subtitle }}</p>
       <div class="toolbar-actions">
-        <el-button type="primary" :icon="Plus" @click="openAdjustmentDialog">
+        <el-button type="primary" :plain="isRechargeRecordsPage" :icon="Plus" @click="openAdjustmentDialog">
           {{ t('wallet.balanceAdjustment') }}
         </el-button>
         <el-button v-if="isRechargeRecordsPage" type="primary" :icon="Plus" @click="openRechargeDialog">
@@ -54,9 +54,11 @@
     </div>
 
     <div class="table-card">
-      <el-table v-loading="loading" class="transaction-table" :data="transactions" :empty-text="t('wallet.empty')">
-        <el-table-column :label="t('wallet.transactionNo')" min-width="170">
-          <template #default="{ row }"><span class="data-id">{{ row.transactionNo }}</span></template>
+      <el-table v-loading="loading" max-height="calc(100vh - 250px)" scrollbar-always-on class="transaction-table" :data="transactions" :empty-text="t('wallet.empty')">
+        <el-table-column :label="t(isRechargeRecordsPage ? 'visual.rechargeTime' : 'visual.transactionTime')" :min-width="isRechargeRecordsPage ? 190 : 170">
+          <template #default="{ row }">
+            {{ formatDate(row.createdAt) }}
+          </template>
         </el-table-column>
         <el-table-column :label="t('wallet.customer')" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
@@ -66,42 +68,43 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.type')" min-width="140">
+        <el-table-column v-if="!isRechargeRecordsPage" :label="t('wallet.type')" min-width="140">
           <template #default="{ row }">
             {{ transactionTypeLabel(row.transactionType) }}
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.relatedOrder')" min-width="190">
-          <template #default="{ row }">
-            <span class="related-id">{{ row.orderNo || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('wallet.orderType')" min-width="140">
-          <template #default="{ row }">
-            {{ orderTypeLabel(row.orderType) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('wallet.direction')" width="110" align="center">
+        <el-table-column v-if="!isRechargeRecordsPage" :label="t('wallet.direction')" width="110" align="center">
           <template #default="{ row }">
             <el-tag :type="row.direction === 'CREDIT' ? 'success' : 'danger'" effect="light">
               {{ t(`wallet.directions.${row.direction}`) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.amount')" width="140" align="right">
+        <el-table-column :label="t(isRechargeRecordsPage ? 'wallet.rechargeAmount' : 'visual.changeAmount')" width="140" align="right">
           <template #default="{ row }">
             <span class="money-value" :class="row.direction === 'CREDIT' ? 'is-credit' : 'is-debit'">{{ formatMoney(row.amount) }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.balanceAfter')" width="150" align="right">
+        <el-table-column :label="t(isRechargeRecordsPage ? 'visual.balanceAfterRecharge' : 'wallet.balanceAfter')" width="150" align="right">
           <template #default="{ row }">
             <span class="balance-value">{{ formatMoney(row.balanceAfter) }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.createdAt')" min-width="170">
+        <el-table-column v-if="isRechargeRecordsPage" :label="t('visual.remark')" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.remark?.trim() || '-' }}</template>
+        </el-table-column>
+        <el-table-column v-if="!isRechargeRecordsPage" :label="t('wallet.relatedOrder')" min-width="190">
           <template #default="{ row }">
-            {{ formatDate(row.createdAt) }}
+            <span class="related-id">{{ row.orderNo || '-' }}</span>
           </template>
+        </el-table-column>
+        <el-table-column v-if="!isRechargeRecordsPage" :label="t('wallet.orderType')" min-width="140">
+          <template #default="{ row }">
+            {{ orderTypeLabel(row.orderType) }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('wallet.transactionNo')" :min-width="isRechargeRecordsPage ? 230 : 170">
+          <template #default="{ row }"><span class="data-id">{{ row.transactionNo }}</span></template>
         </el-table-column>
       </el-table>
       <div class="pagination-bar">
@@ -241,6 +244,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCurrency } from '@/utils/presentation'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -441,15 +445,7 @@ async function submitAdjustment() {
   }
 }
 
-function formatMoney(value: string | number | undefined | null) {
-  if (value === undefined || value === null || value === '') {
-    return '-'
-  }
-  return `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`
-}
+const formatMoney = formatCurrency
 
 function formatDate(value: string | undefined | null) {
   return value ? value.replace('T', ' ') : '-'
@@ -488,6 +484,7 @@ function orderTypeLabel(orderType?: string | null) {
 
 .toolbar-actions {
   display: flex;
+  margin-left: auto;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -709,4 +706,54 @@ p {
   .finance-control-card .customer-select {
     width: 100%;
   }
-}</style>
+}
+
+.recharge-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 16px 18px;
+}
+
+.recharge-controls .filter-panel {
+  order: -1;
+  flex: 1 1 480px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  flex-direction: row;
+}
+
+.recharge-controls .toolbar {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  margin-left: auto;
+}
+
+.recharge-controls .toolbar-actions > .el-button,
+.recharge-controls .filter-actions > .el-button {
+  margin-left: 0;
+}
+
+.recharge-controls .filter-item {
+  flex-direction: row;
+  align-items: center;
+}
+
+.recharge-controls .customer-select {
+  width: 280px;
+}
+
+@media (max-width: 600px) {
+  .recharge-controls { padding: 14px; gap: 14px; }
+  .recharge-controls .filter-panel { flex-basis: 100%; }
+  .recharge-controls .filter-item { width: 100%; }
+  .recharge-controls .customer-select { flex: 1; width: 0; min-width: 0; }
+  .recharge-controls .toolbar { width: 100%; margin: 0; }
+  .recharge-controls .toolbar-actions { gap: 8px; }
+  .recharge-controls .toolbar-actions > .el-button { flex: 1; padding-inline: 10px; }
+}
+</style>

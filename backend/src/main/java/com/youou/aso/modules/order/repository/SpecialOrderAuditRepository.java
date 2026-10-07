@@ -10,6 +10,8 @@ public interface SpecialOrderAuditRepository {
 
     Optional<SpecialOrderAudit> findById(Long id);
 
+    default Optional<SpecialOrderAudit> findByIdForUpdate(Long id) { return findById(id); }
+
     SpecialOrderAudit update(SpecialOrderAudit audit);
 
     List<SpecialOrderAudit> findByCustomerId(Long customerId);

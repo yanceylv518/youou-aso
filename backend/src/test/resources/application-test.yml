@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    # Fail closed unless the isolated test harness supplies a freshly generated schema.
+    url: jdbc:mysql://127.0.0.1:1/tests_not_configured
+    username: unused
+    password: unused
+  flyway:
+    enabled: true
+youou:
+  security:
+    jwt-secret: test-only-secret-never-use-in-production-1234567890
+  upload:
+    app-icon-dir: target/test-uploads/app-icons

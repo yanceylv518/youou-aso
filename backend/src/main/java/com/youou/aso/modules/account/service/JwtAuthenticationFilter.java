@@ -13,10 +13,10 @@ import java.io.IOException;
 import java.util.List;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-    private final JwtTokenService jwtTokenService;
+    private final AccountSessionValidator sessions;
 
-    public JwtAuthenticationFilter(JwtTokenService jwtTokenService) {
-        this.jwtTokenService = jwtTokenService;
+    public JwtAuthenticationFilter(AccountSessionValidator sessions) {
+        this.sessions = sessions;
     }
 
     @Override
@@ -25,7 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authorization != null && authorization.startsWith("Bearer ")) {
             try {
-                AuthenticatedAccount account = jwtTokenService.parse(authorization.substring(7));
+                AuthenticatedAccount account = sessions.validate(authorization.substring(7));
                 var authentication = new UsernamePasswordAuthenticationToken(account, null, List.of());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (RuntimeException ignored) {

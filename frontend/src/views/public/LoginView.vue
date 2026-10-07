@@ -1,6 +1,6 @@
 <template>
   <section class="auth-page">
-    <el-form class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
+    <el-form ref="formRef" :rules="rules" scroll-to-error class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
       <div class="auth-brand">
         <img class="brand-mark" :src="systemLogo" alt="" />
         <span>{{ t('app.name') }}</span>
@@ -9,10 +9,10 @@
         <h1>{{ t('auth.loginTitle') }}</h1>
         <p>{{ t('auth.loginSubtitle') }}</p>
       </header>
-      <el-form-item :label="t('auth.account')">
+      <el-form-item prop="account" :label="t('auth.account')">
         <el-input v-model="form.account" autocomplete="username" size="large" />
       </el-form-item>
-      <el-form-item :label="t('auth.password')">
+      <el-form-item prop="password" :label="t('auth.password')">
         <el-input v-model="form.password" type="password" autocomplete="current-password" show-password size="large" />
       </el-form-item>
       <div class="form-meta">
@@ -31,6 +31,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed, nextTick } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -72,7 +74,20 @@ function getErrorMessage(error: unknown) {
   return t('auth.loginFailed')
 }
 
+
+const formRef = ref<FormInstance>()
+const rules = computed<FormRules>(() => ({
+  account: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }],
+  password: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }],
+}))
+async function validateForm() {
+ const valid = await formRef.value?.validate().catch(() => false)
+ if(!valid){await nextTick();formRef.value?.$el.querySelector('.is-error input')?.focus()}
+ return valid
+}
+
 async function submit() {
+  if (!await validateForm()) return
   if (!form.account.trim() || !form.password) {
     ElMessage.warning(t('auth.requiredFields'))
     return

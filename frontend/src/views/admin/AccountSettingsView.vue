@@ -179,10 +179,9 @@ async function submitPasswordChange() {
       newPassword: passwordForm.newPassword,
       confirmPassword: passwordForm.confirmPassword
     })
-    auth.forcePasswordChange = false
-    auth.persist()
     passwordDialogVisible.value = false
     ElMessage.success(t('accountSettings.passwordChanged'))
+    await logout()
   } catch (error) {
     ElMessage.error(errorMessage(error, t('accountSettings.passwordChangeFailed')))
   } finally {

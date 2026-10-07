@@ -20,6 +20,7 @@ public class AsoOrder {
     private OrderType orderType;
     private Long orderModuleId;
     private String orderModuleName;
+    private java.util.Map<String, String> orderModuleNames = java.util.Map.of();
     private PriceCode pricingCode;
     private StoreType storeType;
     private String regionCode;
@@ -28,6 +29,7 @@ public class AsoOrder {
     private String appIconUrl;
     private OrderStatus status;
     private LocalDate orderStartDate;
+    private LocalDateTime scheduledStartAt;
     private LocalDate orderEndDate;
     private Integer executionHours;
     private Integer totalDays;
@@ -51,6 +53,10 @@ public class AsoOrder {
     private List<OrderItem> items = new ArrayList<>();
     private List<OrderCommentDetail> commentDetails = new ArrayList<>();
     private List<OrderEvent> events = new ArrayList<>();
+
+    public LocalDateTime getScheduledStartAt() { return scheduledStartAt; }
+
+    public void setScheduledStartAt(LocalDateTime scheduledStartAt) { this.scheduledStartAt = scheduledStartAt; }
 
     public Long getId() {
         return id;
@@ -119,6 +125,10 @@ public class AsoOrder {
     public Long getOrderModuleId() { return orderModuleId; }
 
     public void setOrderModuleId(Long orderModuleId) { this.orderModuleId = orderModuleId; }
+
+    public java.util.Map<String, String> getOrderModuleNames() { return orderModuleNames; }
+
+    public void setOrderModuleNames(java.util.Map<String, String> names) { this.orderModuleNames = names; }
 
     public String getOrderModuleName() { return orderModuleName; }
 

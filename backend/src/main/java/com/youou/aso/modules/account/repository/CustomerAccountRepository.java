@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CustomerAccountRepository {
+    default void lockRegistration() {}
+
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);

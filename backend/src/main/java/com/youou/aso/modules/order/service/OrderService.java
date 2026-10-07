@@ -116,7 +116,9 @@ public class OrderService {
     }
 
     private AsoOrder createOrder(Long customerId, CreateOrderCommand command, OrderStatus paidStatus, Long confirmedByAdminId) {
+        if (confirmedByAdminId == null) command = resolveImmediateStart(command);
         validateCreateCommand(customerId, command);
+        if (confirmedByAdminId == null && !Boolean.TRUE.equals(command.startImmediately())) validateCustomerOrderTime(command.orderType(), scheduledStart(command));
         CustomerApp app = loadActiveCustomerApp(customerId, command.customerAppId());
         PriceSnapshot priceSnapshot = calculatePrice(command, app);
         AsoOrder order = buildOrder(customerId, app, command, priceSnapshot);
@@ -129,13 +131,26 @@ public class OrderService {
         saved.setItems(priceSnapshot.items());
         saved.setCommentDetails(priceSnapshot.commentDetails());
         reviewAttachmentService.bind(saved, command);
+        recordLifecycleEvent(saved, "CREATED", confirmedByAdminId);
         notifyOrderCreated(saved);
         return saved;
     }
 
     @Transactional
     public AsoOrder resubmitEditableOrder(Long customerId, Long orderId, CreateOrderCommand command) {
+        return editOrderDraft(customerId, orderId, command, null);
+    }
+
+    @Transactional
+    public AsoOrder editAdminOrder(Long customerId, Long orderId, Long adminId, CreateOrderCommand command) {
+        if (adminId == null) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        return editOrderDraft(customerId, orderId, command, adminId);
+    }
+
+    private AsoOrder editOrderDraft(Long customerId, Long orderId, CreateOrderCommand command, Long adminId) {
+        if (adminId == null) command = resolveImmediateStart(command);
         validateCreateCommand(customerId, command);
+        if (adminId == null && !Boolean.TRUE.equals(command.startImmediately())) validateCustomerOrderTime(command.orderType(), scheduledStart(command));
         if (orderId == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -143,17 +158,37 @@ public class OrderService {
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         OrderStatus originalStatus = order.getStatus();
-        if ((!OrderStatus.PENDING_PAYMENT.equals(originalStatus) && !OrderStatus.PENDING_CONFIRM.equals(originalStatus))
-                || order.getSourceAuditId() != null) {
+        boolean editable = adminId == null
+                ? OrderStatus.PENDING_PAYMENT.equals(originalStatus) || OrderStatus.PENDING_CONFIRM.equals(originalStatus) || OrderStatus.CANCELLED.equals(originalStatus)
+                : OrderStatus.PENDING_CONFIRM.equals(originalStatus) || OrderStatus.PENDING_EXECUTION.equals(originalStatus);
+        if (!editable || order.getSourceAuditId() != null) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        }
+        if (adminId != null) {
+            if (!order.getCustomerAppId().equals(command.customerAppId()) || order.getOrderType() != command.orderType()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            attachItems(order);
+            if (hasRecordedProgress(order)) throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
 
         CustomerApp app = loadActiveCustomerApp(customerId, command.customerAppId());
         PriceSnapshot priceSnapshot = calculatePrice(command, app);
         BigDecimal oldTotal = order.getTotalAmount() == null ? BigDecimal.ZERO : order.getTotalAmount();
         int oldQuantity = order.getQuantity() == null ? 0 : order.getQuantity();
-        copyOrderDraft(order, app, command, priceSnapshot);
-        if (OrderStatus.PENDING_PAYMENT.equals(originalStatus)) {
+        boolean requiresFullPayment = OrderStatus.PENDING_PAYMENT.equals(originalStatus) || OrderStatus.CANCELLED.equals(originalStatus);
+        if (OrderStatus.CANCELLED.equals(originalStatus)) {
+            order.setRejectReason(null);
+            order.setRefundTransactionId(null);
+            order.setRefundAmount(BigDecimal.ZERO);
+            order.setConfirmedByAdminId(null);
+            order.setConfirmedAt(null);
+            order.setExecutedByAdminId(null);
+            order.setExecutedAt(null);
+            order.setCompletedAt(null);
+            order.setDeductedTransactionId(null);
+        }
+        if (requiresFullPayment) {
             applyPaymentStatus(order, priceSnapshot, "ORDER_DEDUCT_RETRY:" + order.getOrderNo(), OrderStatus.PENDING_CONFIRM, null);
         } else {
             BigDecimal difference = priceSnapshot.totalAmount().subtract(oldTotal);
@@ -168,10 +203,11 @@ public class OrderService {
                 order.setBalanceAfter(refund.balanceAfter());
                 walletService.linkTransactionToOrder(refund.transactionId(), order.getId());
             }
-            order.setStatus(OrderStatus.PENDING_CONFIRM);
+            order.setStatus(adminId == null ? OrderStatus.PENDING_CONFIRM : originalStatus);
         }
+        copyOrderDraft(order, app, command, priceSnapshot);
         AsoOrder updated = orderRepository.updatePaymentDraft(order);
-        if (OrderStatus.PENDING_PAYMENT.equals(originalStatus)) {
+        if (requiresFullPayment) {
             walletService.linkTransactionToOrder(updated.getDeductedTransactionId(), updated.getId());
         }
         reviewAttachmentService.bind(updated, command);
@@ -181,15 +217,17 @@ public class OrderService {
         orderCommentDetailRepository.saveAll(updated.getId(), priceSnapshot.commentDetails());
         updated.setItems(priceSnapshot.items());
         updated.setCommentDetails(priceSnapshot.commentDetails());
-        if (OrderStatus.PENDING_PAYMENT.equals(originalStatus)) {
+        if (requiresFullPayment) {
+            recordLifecycleEvent(updated, "RESUBMITTED", adminId);
             notifyOrderCreated(updated);
         } else {
-            recordEvent(updated, "UPDATED", null, oldQuantity, updated.getQuantity(), 0, 0, oldTotal, updated.getTotalAmount());
+            recordEvent(updated, "UPDATED", adminId, oldQuantity, updated.getQuantity(), 0, 0, oldTotal, updated.getTotalAmount());
         }
         return updated;
     }
 
     /** Kept for binary compatibility with callers compiled against the previous name. */
+    @Transactional
     public AsoOrder resubmitPendingPaymentOrder(Long customerId, Long orderId, CreateOrderCommand command) {
         return resubmitEditableOrder(customerId, orderId, command);
     }
@@ -206,6 +244,10 @@ public class OrderService {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
 
+        if (order.getConfirmedByAdminId() == null) {
+            validateCustomerOrderTime(order.getOrderType(), order.getScheduledStartAt() != null
+                    ? order.getScheduledStartAt() : order.getOrderStartDate().atStartOfDay());
+        }
         OrderStatus paidStatus = order.getConfirmedByAdminId() == null
                 ? OrderStatus.PENDING_CONFIRM
                 : OrderStatus.PENDING_EXECUTION;
@@ -222,6 +264,7 @@ public class OrderService {
         AsoOrder updated = orderRepository.update(order);
         walletService.linkTransactionToOrder(updated.getDeductedTransactionId(), updated.getId());
         if (!OrderStatus.PENDING_PAYMENT.equals(updated.getStatus())) {
+            recordLifecycleEvent(updated, "PAID", null);
             notifyOrderCreated(updated);
         }
         return attachDetails(attachItems(updated));
@@ -238,6 +281,7 @@ public class OrderService {
         order.setStatus(OrderStatus.PENDING_EXECUTION);
         order.setConfirmedByAdminId(adminId);
         order.setConfirmedAt(now());
+        recordLifecycleEvent(order, "CONFIRMED", adminId);
         return orderRepository.update(order);
     }
 
@@ -248,7 +292,8 @@ public class OrderService {
         }
         List<AsoOrder> orders = orderIds.stream()
                 .distinct()
-                .map(orderId -> orderRepository.findById(orderId)
+                .sorted()
+                .map(orderId -> orderRepository.findByIdForUpdate(orderId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND)))
                 .toList();
         if (orders.stream().anyMatch(order -> !OrderStatus.PENDING_CONFIRM.equals(order.getStatus()))) {
@@ -260,6 +305,7 @@ public class OrderService {
                     order.setStatus(OrderStatus.PENDING_EXECUTION);
                     order.setConfirmedByAdminId(adminId);
                     order.setConfirmedAt(confirmedAt);
+                    recordLifecycleEvent(order, "CONFIRMED", adminId);
                     return orderRepository.update(order);
                 })
                 .toList();
@@ -331,9 +377,10 @@ public class OrderService {
 
     @Transactional
     public AsoOrder executeOrder(Long orderId, Long adminId) {
-        AsoOrder order = orderRepository.findById(orderId)
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         applyExecution(order, adminId, now());
+        recordLifecycleEvent(order, "EXECUTED", adminId);
         return orderRepository.update(order);
     }
 
@@ -344,16 +391,19 @@ public class OrderService {
         }
         List<AsoOrder> orders = orderIds.stream()
                 .distinct()
-                .map(orderId -> orderRepository.findById(orderId)
+                .sorted()
+                .map(orderId -> orderRepository.findByIdForUpdate(orderId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND)))
                 .toList();
         if (orders.stream().anyMatch(order -> !OrderStatus.PENDING_EXECUTION.equals(order.getStatus()))) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         LocalDateTime now = now();
+        orders.forEach(order -> validateExecutionStart(order, now));
         return orders.stream()
                 .map(order -> {
                     applyExecution(order, adminId, now);
+                    recordLifecycleEvent(order, "EXECUTED", adminId);
                     return orderRepository.update(order);
                 })
                 .toList();
@@ -361,7 +411,7 @@ public class OrderService {
 
     @Transactional
     public AsoOrder pauseOrder(Long orderId, Long adminId) {
-        AsoOrder order = orderRepository.findById(orderId)
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!OrderStatus.EXECUTING.equals(order.getStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
@@ -379,7 +429,8 @@ public class OrderService {
         }
         List<AsoOrder> orders = orderIds.stream()
                 .distinct()
-                .map(orderId -> orderRepository.findById(orderId)
+                .sorted()
+                .map(orderId -> orderRepository.findByIdForUpdate(orderId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND)))
                 .toList();
         if (orders.stream().anyMatch(order -> !OrderStatus.EXECUTING.equals(order.getStatus()))) {
@@ -397,7 +448,7 @@ public class OrderService {
 
     @Transactional
     public AsoOrder resumeOrder(Long orderId, Long adminId) {
-        AsoOrder order = orderRepository.findById(orderId)
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!OrderStatus.PAUSED.equals(order.getStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
@@ -410,13 +461,24 @@ public class OrderService {
 
     @Transactional
     public AsoOrder updatePausedOrder(Long orderId, Long adminId, List<PausedItemEdit> edits) {
-        AsoOrder order = orderRepository.findById(orderId)
+        return updatePausedOrder(orderId, adminId, edits, false);
+    }
+
+    @Transactional
+    public AsoOrder closePausedOrder(Long orderId, Long adminId, List<PausedItemEdit> edits) {
+        return updatePausedOrder(orderId, adminId, edits, true);
+    }
+
+    private AsoOrder updatePausedOrder(Long orderId, Long adminId, List<PausedItemEdit> edits, boolean close) {
+        if (adminId == null) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!OrderStatus.PAUSED.equals(order.getStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         attachItems(order);
-        if (edits == null || edits.size() != order.getItems().size()) {
+        if (edits == null || edits.isEmpty() || edits.size() != order.getItems().size()
+                || edits.stream().anyMatch(edit -> edit == null || edit.itemId() == null)) {
             throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
         }
         Map<Long, PausedItemEdit> editByItemId;
@@ -432,13 +494,17 @@ public class OrderService {
                 .reduce(0, Integer::sum);
         for (OrderItem item : order.getItems()) {
             PausedItemEdit edit = editByItemId.get(item.getId());
-            if (edit == null || edit.quantity() == null || edit.quantity() < 1
+            if (edit == null || edit.quantity() == null || edit.quantity() < (close ? 0 : 1)
+                    || (close && (item.getQuantity() == null || edit.quantity() > item.getQuantity()))
                     || edit.completedQuantity() == null || edit.completedQuantity() < 0
                     || edit.completedQuantity() > edit.quantity()) {
                 throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
             }
+        }
+        for (OrderItem item : order.getItems()) {
+            PausedItemEdit edit = editByItemId.get(item.getId());
             item.setQuantity(edit.quantity());
-            item.setCompletedQuantity(edit.completedQuantity());
+            item.setCompletedQuantity(close ? edit.quantity() : edit.completedQuantity());
             item.setAmount(item.getUnitPrice().multiply(BigDecimal.valueOf(edit.quantity()))
                     .setScale(2, RoundingMode.HALF_UP));
         }
@@ -465,18 +531,22 @@ public class OrderService {
         }
         order.setQuantity(order.getItems().stream().map(OrderItem::getQuantity).reduce(0, Integer::sum));
         order.setTotalAmount(newTotal);
+        if (close) {
+            order.setStatus(OrderStatus.COMPLETED);
+            order.setCompletedAt(now());
+        }
         orderItemRepository.updateQuantitiesAndProgress(order.getItems());
         AsoOrder updated = orderRepository.update(order);
         Integer newCompleted = updated.getItems().stream()
                 .map(item -> item.getCompletedQuantity() == null ? 0 : item.getCompletedQuantity())
                 .reduce(0, Integer::sum);
-        recordEvent(updated, "UPDATED", adminId, oldQuantity, updated.getQuantity(),
+        recordEvent(updated, close ? "CLOSED" : "UPDATED", adminId, oldQuantity, updated.getQuantity(),
                 oldCompleted, newCompleted, oldTotal, newTotal);
         return attachItems(updated);
     }
     @Transactional
     public AsoOrder cancelOrder(Long orderId, Long adminId, String reason) {
-        AsoOrder order = orderRepository.findById(orderId)
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
         if (!OrderStatus.PENDING_CONFIRM.equals(order.getStatus())
                 && !OrderStatus.PENDING_EXECUTION.equals(order.getStatus())) {
@@ -499,10 +569,14 @@ public class OrderService {
                     "ORDER_REFUND:" + order.getOrderNo()
             );
             order.setRefundTransactionId(refund.transactionId());
+            order.setBalanceBefore(refund.balanceBefore());
+            order.setBalanceAfter(refund.balanceAfter());
             walletService.linkTransactionToOrder(refund.transactionId(), order.getId());
         }
         order.setStatus(OrderStatus.CANCELLED);
         order.setRejectReason(normalizeCancelReason(reason));
+        if (order.getRefundTransactionId() != null) order.setRefundAmount(order.getTotalAmount());
+        recordLifecycleEvent(order, "CANCELLED", adminId);
         return orderRepository.update(order);
     }
 
@@ -547,6 +621,7 @@ public class OrderService {
         order.setAppIdentifier(app.getAppIdentifier());
         order.setAppName(app.getAppName());
         order.setAppIconUrl(app.getAppIconUrl());
+        order.setScheduledStartAt(scheduledStart(command));
         order.setOrderStartDate(command.startDate());
         order.setOrderEndDate(command.endDate());
         order.setExecutionHours(command.executionHours());
@@ -554,7 +629,9 @@ public class OrderService {
         order.setQuantity(priceSnapshot.quantity());
         order.setUnitPrice(priceSnapshot.unitPrice());
         order.setTotalAmount(priceSnapshot.totalAmount());
-        order.setExpectedCompletedAt(command.endDate().plusDays(1).atStartOfDay());
+        order.setExpectedCompletedAt(OrderType.KEYWORD_INSTALL.equals(command.orderType())
+                ? order.getScheduledStartAt().plusHours(keywordExecutionHours(order))
+                : command.endDate().plusDays(1).atStartOfDay());
     }
 
     private void applyPaymentStatus(AsoOrder order, PriceSnapshot priceSnapshot, String remark) {
@@ -568,6 +645,9 @@ public class OrderService {
             OrderStatus paidStatus,
             Long confirmedByAdminId
     ) {
+        if (priceSnapshot.totalAmount() == null || priceSnapshot.totalAmount().signum() <= 0) {
+            throw new BusinessException(ErrorCode.PRICE_INVALID);
+        }
         if (OrderStatus.PENDING_EXECUTION.equals(paidStatus)) {
             order.setConfirmedByAdminId(confirmedByAdminId);
         }
@@ -598,6 +678,7 @@ public class OrderService {
 
     private PriceSnapshot calculatePrice(CreateOrderCommand command, CustomerApp app) {
         OrderModuleConfig module = resolveOrderModule(command);
+        if (module != null && !module.storeTypes().contains(app.getStoreType())) throw new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED);
         return switch (command.orderType()) {
             case KEYWORD_INSTALL -> calculateKeywordInstall(command, app, module);
             case DOWNLOAD -> calculateDownload(command, app, module);
@@ -629,16 +710,53 @@ public class OrderService {
         if (!OrderStatus.PENDING_EXECUTION.equals(order.getStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
+        validateExecutionStart(order, now);
         order.setExecutedByAdminId(adminId);
         order.setExecutedAt(now);
         if (OrderType.KEYWORD_INSTALL.equals(order.getOrderType())) {
-            order.setExpectedCompletedAt(now.plusHours(keywordExecutionHours(order)));
+            LocalDateTime scheduledStart = order.getScheduledStartAt() != null ? order.getScheduledStartAt()
+                    : order.getOrderStartDate() == null ? now : order.getOrderStartDate().atStartOfDay();
+            LocalDateTime executionStart = scheduledStart.isAfter(now) ? scheduledStart : now;
+            order.setExpectedCompletedAt(executionStart.plusHours(keywordExecutionHours(order)));
         }
         if (order.getExpectedCompletedAt() != null && !order.getExpectedCompletedAt().isAfter(now)) {
             order.setStatus(OrderStatus.COMPLETED);
             order.setCompletedAt(now);
         } else {
             order.setStatus(OrderStatus.EXECUTING);
+        }
+    }
+
+    private void validateExecutionStart(AsoOrder order, LocalDateTime now) {
+        if (order.getOrderType() != OrderType.KEYWORD_INSTALL && order.getOrderType() != OrderType.DOWNLOAD
+                && order.getOrderType() != OrderType.RATING && order.getOrderType() != OrderType.REVIEW) return;
+        LocalDateTime start = order.getOrderType() == OrderType.KEYWORD_INSTALL && order.getScheduledStartAt() != null
+                ? order.getScheduledStartAt()
+                : order.getOrderStartDate() == null ? null : order.getOrderStartDate().atStartOfDay();
+        if (start != null && start.isAfter(now)) throw new BusinessException(ErrorCode.ORDER_NOT_STARTED);
+    }
+
+    private CreateOrderCommand resolveImmediateStart(CreateOrderCommand command) {
+        if (command == null || command.orderType() != OrderType.KEYWORD_INSTALL
+                || !Boolean.TRUE.equals(command.startImmediately())) return command;
+        LocalDateTime start = now().truncatedTo(ChronoUnit.MINUTES);
+        return new CreateOrderCommand(command.customerAppId(), command.regionCode(), command.orderType(), start.toLocalDate(), start.toLocalDate(), command.executionHours(), command.keywords(), command.keywordItems(), command.regionItems(), command.reviewDetails(), command.dailyDownloadCount(), command.rating5Count(), command.rating4Count(), command.review5Count(), command.review4Count(), command.orderModuleId(), start, true);
+    }
+
+    private LocalDateTime scheduledStart(CreateOrderCommand command) {
+        if (!OrderType.KEYWORD_INSTALL.equals(command.orderType())) return null;
+        LocalDateTime scheduled = command.scheduledStartAt() == null
+                ? command.startDate().atStartOfDay() : command.scheduledStartAt().truncatedTo(ChronoUnit.MINUTES);
+        if (!scheduled.toLocalDate().equals(command.startDate())) {
+            throw new BusinessException(ErrorCode.ORDER_DATE_INVALID);
+        }
+        return scheduled;
+    }
+
+    private void validateCustomerOrderTime(OrderType type, LocalDateTime scheduled) {
+        if (OrderType.KEYWORD_INSTALL.equals(type)
+                && (scheduled == null || scheduled.isBefore(now().truncatedTo(ChronoUnit.MINUTES)))) {
+            throw new BusinessException(ErrorCode.ORDER_TIME_IN_PAST);
         }
     }
 
@@ -662,6 +780,7 @@ public class OrderService {
             }
             order.setStatus(OrderStatus.COMPLETED);
             order.setCompletedAt(now);
+            recordLifecycleEvent(order, "COMPLETED", null);
             orderRepository.update(order);
         });
         return dueOrders.size();
@@ -675,11 +794,11 @@ public class OrderService {
         if (order.getRefundTransactionId() != null) {
             return;
         }
-        BigDecimal refundAmount = order.getItems().stream()
+        BigDecimal remainingAmount = order.getItems().stream()
                 .map(item -> item.getUnitPrice().multiply(BigDecimal.valueOf(
-                        item.getQuantity() - (item.getCompletedQuantity() == null ? 0 : item.getCompletedQuantity()))))
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
+                        item.getCompletedQuantity() == null ? 0 : item.getCompletedQuantity())).setScale(2, RoundingMode.HALF_UP))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal refundAmount = order.getTotalAmount().subtract(remainingAmount).max(BigDecimal.ZERO);
         order.setRefundAmount(refundAmount);
         if (refundAmount.signum() == 0) {
             return;
@@ -691,6 +810,69 @@ public class OrderService {
     }
 
     public record PausedItemEdit(Long itemId, Integer quantity, Integer completedQuantity) {
+    }
+
+    public record CompletedItemEdit(Long itemId, Integer completedQuantity) {
+    }
+
+    @Transactional
+    public AsoOrder adjustCompletedOrder(Long orderId, Long adminId, List<CompletedItemEdit> edits, String reason) {
+        if (reason == null || reason.isBlank() || reason.length() > 500) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        if (adminId == null) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (order.getStatus() != OrderStatus.COMPLETED) throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        attachItems(order);
+        if (edits == null || edits.isEmpty() || edits.size() != order.getItems().size()
+                || edits.stream().anyMatch(edit -> edit == null || edit.itemId() == null || edit.completedQuantity() == null)) {
+            throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        }
+        Map<Long, CompletedItemEdit> byId;
+        try {
+            byId = edits.stream().collect(java.util.stream.Collectors.toMap(CompletedItemEdit::itemId, edit -> edit));
+        } catch (IllegalStateException exception) {
+            throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        }
+        if (order.getTotalAmount() == null) throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        BigDecimal previousRefund = order.getRefundAmount() == null ? BigDecimal.ZERO : order.getRefundAmount();
+        BigDecimal remainingAmount = BigDecimal.ZERO;
+        int oldCompleted = 0;
+        int newCompleted = 0;
+        for (OrderItem item : order.getItems()) {
+            if (item.getQuantity() == null || item.getQuantity() < 0) throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+            int previous = item.getCompletedQuantity() != null ? item.getCompletedQuantity()
+                    : order.getRefundTransactionId() != null || previousRefund.signum() > 0 ? 0 : item.getQuantity();
+            CompletedItemEdit edit = byId.get(item.getId());
+            if (edit == null || edit.completedQuantity() < 0 || edit.completedQuantity() > previous
+                    || item.getUnitPrice() == null || item.getUnitPrice().signum() < 0) {
+                throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+            }
+            oldCompleted += previous;
+            newCompleted += edit.completedQuantity();
+            remainingAmount = remainingAmount.add(item.getUnitPrice().multiply(BigDecimal.valueOf(edit.completedQuantity()))
+                    .setScale(2, RoundingMode.HALF_UP));
+        }
+        if (newCompleted == oldCompleted) return order;
+        BigDecimal cumulativeRefund = order.getTotalAmount().subtract(remainingAmount).max(previousRefund);
+        BigDecimal refundAmount = cumulativeRefund.subtract(previousRefund);
+        if (cumulativeRefund.compareTo(order.getTotalAmount()) > 0) {
+            throw new BusinessException(ErrorCode.ORDER_QUANTITY_INVALID);
+        }
+        if (refundAmount.signum() > 0) {
+            WalletDebitResult refund = walletService.refundForOrder(order.getCustomerId(), refundAmount,
+                    "ORDER_COMPLETION_ADJUSTMENT:" + order.getOrderNo());
+            order.setBalanceBefore(refund.balanceBefore());
+            order.setBalanceAfter(refund.balanceAfter());
+            order.setRefundTransactionId(refund.transactionId());
+            walletService.linkTransactionToOrder(refund.transactionId(), orderId);
+        }
+        order.setRefundAmount(cumulativeRefund);
+        order.getItems().forEach(item -> item.setCompletedQuantity(byId.get(item.getId()).completedQuantity()));
+        orderItemRepository.updateCompletedQuantities(order.getItems());
+        AsoOrder updated = orderRepository.update(order);
+        recordEvent(updated, "COMPLETION_ADJUSTED", adminId, order.getQuantity(), order.getQuantity(),
+                oldCompleted, newCompleted, order.getTotalAmount().subtract(previousRefund), order.getTotalAmount().subtract(cumulativeRefund), reason.trim());
+        return attachItems(updated);
     }
 
     private PriceSnapshot calculateKeywordInstall(CreateOrderCommand command, CustomerApp app, OrderModuleConfig module) {
@@ -1070,18 +1252,37 @@ public class OrderService {
         if (orders.isEmpty()) {
             return orders;
         }
-        orders.forEach(order -> order.setCommentDetails(List.of()));
+        Map<Long, Map<String, String>> moduleNames = new java.util.HashMap<>();
+        if (orderModuleConfigService != null && orders.stream().anyMatch(order -> order.getOrderModuleId() != null)) {
+            for (OrderModuleConfig module : orderModuleConfigService.listAll()) {
+                Map<String, String> names = new java.util.HashMap<>();
+                String[] locales = {"zh-CN", "en-US", "ru-RU", "pt-PT", "es-ES"};
+                String[] values = {module.moduleName(), module.moduleNameEn(), module.moduleNameRu(), module.moduleNamePt(), module.moduleNameEs()};
+                for (int i = 0; i < locales.length; i++) {
+                    if (values[i] != null && !values[i].isBlank()) names.put(locales[i], values[i].trim());
+                }
+                moduleNames.put(module.id(), Map.copyOf(names));
+            }
+        }
+        orders.forEach(order -> {
+            order.setCommentDetails(List.of());
+            order.setOrderModuleNames(moduleNames.getOrDefault(order.getOrderModuleId(), Map.of()));
+        });
         return orders;
     }
 
     private AsoOrder attachDetails(AsoOrder order) {
-        order.setCommentDetails(List.of());
+        attachDetails(List.of(order));
         return order;
     }
 
     private AsoOrder attachEvents(AsoOrder order) {
         order.setEvents(orderEventRepository.findByOrderId(order.getId()));
         return order;
+    }
+
+    private void recordLifecycleEvent(AsoOrder order, String type, Long adminId) {
+        recordEvent(order, type, adminId, null, order.getQuantity(), null, null, null, order.getTotalAmount());
     }
 
     private void recordEvent(
@@ -1095,9 +1296,24 @@ public class OrderService {
             BigDecimal amountBefore,
             BigDecimal amountAfter
     ) {
+        recordEvent(order, eventType, adminId, quantityBefore, quantityAfter, completedBefore, completedAfter, amountBefore, amountAfter, null);
+    }
+    private void recordEvent(
+            AsoOrder order,
+            String eventType,
+            Long adminId,
+            Integer quantityBefore,
+            Integer quantityAfter,
+            Integer completedBefore,
+            Integer completedAfter,
+            BigDecimal amountBefore,
+            BigDecimal amountAfter,
+            String reason
+    ) {
         OrderEvent event = new OrderEvent();
         event.setOrderId(order.getId());
         event.setEventType(eventType);
+        event.setReason(reason);
         event.setQuantityBefore(quantityBefore);
         event.setQuantityAfter(quantityAfter);
         event.setCompletedBefore(completedBefore);
@@ -1173,9 +1389,11 @@ public class OrderService {
     }
 
     private BigDecimal unitPriceForRegion(PricingConfig price, String regionCode, OrderModuleConfig module) {
-        ensureRegionAllowed(orderTypeFor(price.getCode()), regionCode);
-        return pricingConfigRepository.findRegionPrice(price.getCode(), regionCode)
-                .orElseGet(() -> module == null ? unitPriceForRegion(price, regionCode) : module.priceFor(regionCode));
+        if (module == null) return unitPriceForRegion(price, regionCode);
+        if (!pricingConfigRepository.findModuleRegions(module.id()).contains(regionCode)) throw new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+        BigDecimal priceValue = pricingConfigRepository.findModulePrices(module.id(),price.getCode()).getOrDefault(regionCode,module.priceFor(regionCode));
+        if (priceValue == null || priceValue.signum() <= 0) throw new BusinessException(ErrorCode.PRICE_INVALID);
+        return priceValue;
     }
 
     private void ensureRegionAllowed(OrderType orderType, String regionCode) {

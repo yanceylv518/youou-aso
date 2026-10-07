@@ -44,6 +44,7 @@ public class JdbcOrderRepository implements OrderRepository {
         order.setStatus(OrderStatus.valueOf(rs.getString("status")));
         order.setOrderStartDate(rs.getDate("order_start_date") == null ? null : rs.getDate("order_start_date").toLocalDate());
         order.setOrderEndDate(rs.getDate("order_end_date") == null ? null : rs.getDate("order_end_date").toLocalDate());
+        order.setScheduledStartAt(readDateTime(rs.getTimestamp("scheduled_start_at")));
         order.setExecutionHours(readInteger(rs, "execution_hours"));
         order.setTotalDays(readInteger(rs, "total_days"));
         order.setQuantity(readInteger(rs, "quantity"));
@@ -82,8 +83,8 @@ public class JdbcOrderRepository implements OrderRepository {
                              order_start_date, order_end_date, execution_hours, total_days, quantity, unit_price,
                              total_amount, balance_before, balance_after, deducted_transaction_id,
                              refund_transaction_id, reject_reason, confirmed_by_admin_id, confirmed_at,
-                             executed_by_admin_id, executed_at, expected_completed_at, completed_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             executed_by_admin_id, executed_at, expected_completed_at, completed_at, scheduled_start_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -115,7 +116,7 @@ public class JdbcOrderRepository implements OrderRepository {
                         SET status = ?, reject_reason = ?, confirmed_by_admin_id = ?, confirmed_at = ?,
                             executed_by_admin_id = ?, executed_at = ?, expected_completed_at = ?,
                             completed_at = ?, refund_transaction_id = ?, refund_amount = ?, quantity = ?, total_amount = ?,
-                            balance_before = ?, balance_after = ?, updated_at = CURRENT_TIMESTAMP
+                            balance_before = ?, balance_after = ?, deducted_transaction_id = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                         """,
                 order.getStatus().name(),
@@ -132,6 +133,7 @@ public class JdbcOrderRepository implements OrderRepository {
                 order.getTotalAmount(),
                 order.getBalanceBefore(),
                 order.getBalanceAfter(),
+                order.getDeductedTransactionId(),
                 order.getId()
         );
         return findById(order.getId()).orElse(order);
@@ -146,7 +148,10 @@ public class JdbcOrderRepository implements OrderRepository {
                             region_code = ?, app_identifier = ?, app_name = ?, app_icon_url = ?, status = ?,
                             order_start_date = ?, order_end_date = ?, execution_hours = ?, total_days = ?,
                             quantity = ?, unit_price = ?, total_amount = ?, balance_before = ?, balance_after = ?,
-                            deducted_transaction_id = ?, expected_completed_at = ?, updated_at = CURRENT_TIMESTAMP
+                            deducted_transaction_id = ?, expected_completed_at = ?, scheduled_start_at = ?,
+                            reject_reason = ?, refund_transaction_id = ?, refund_amount = ?,
+                            confirmed_by_admin_id = ?, confirmed_at = ?, executed_by_admin_id = ?, executed_at = ?, completed_at = ?,
+                            updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                         """,
                 order.getCustomerAppId(),
@@ -171,6 +176,15 @@ public class JdbcOrderRepository implements OrderRepository {
                 order.getBalanceAfter(),
                 order.getDeductedTransactionId(),
                 order.getExpectedCompletedAt(),
+                order.getScheduledStartAt(),
+                order.getRejectReason(),
+                order.getRefundTransactionId(),
+                order.getRefundAmount(),
+                order.getConfirmedByAdminId(),
+                order.getConfirmedAt(),
+                order.getExecutedByAdminId(),
+                order.getExecutedAt(),
+                order.getCompletedAt(),
                 order.getId()
         );
         return findById(order.getId()).orElse(order);
@@ -350,6 +364,7 @@ public class JdbcOrderRepository implements OrderRepository {
         ps.setObject(30, order.getExecutedAt());
         ps.setObject(31, order.getExpectedCompletedAt());
         ps.setObject(32, order.getCompletedAt());
+        ps.setObject(33, order.getScheduledStartAt());
     }
 
     private static Integer readInteger(java.sql.ResultSet rs, String column) throws java.sql.SQLException {

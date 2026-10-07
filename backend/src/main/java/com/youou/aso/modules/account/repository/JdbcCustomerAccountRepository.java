@@ -40,6 +40,11 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
     }
 
     @Override
+    public void lockRegistration() {
+        jdbcTemplate.queryForObject("SELECT id FROM account_registration_lock WHERE id = 1 FOR UPDATE", Integer.class);
+    }
+
+    @Override
     public boolean existsByUsername(String username) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM customer_account WHERE username = ?",

@@ -25,6 +25,7 @@ export interface UpdatePricingPayload {
 }
 
 export interface OrderTypeRegionPricing {
+  orderModuleId: number
   orderType: OrderType
   allowedRegionCodes: string[]
   regionPrices: Partial<Record<PriceCode, Record<string, string | number>>>

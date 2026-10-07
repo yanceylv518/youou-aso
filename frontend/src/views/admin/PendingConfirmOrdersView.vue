@@ -178,7 +178,7 @@
           <template #default="{ row }">{{ row.sourceAuditId ? t('ordersPage.categories.SPECIAL') : t('ordersPage.categories.REGULAR') }}</template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="190">
-          <template #default="{ row }">{{ `${row.orderStartDate} - ${row.orderEndDate}` }}</template>
+          <template #default="{ row }">{{ formatOrderSchedule(row) }}</template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
           <template #default="{ row }">{{ valueOrDash(row.totalDays) }}</template>
@@ -190,7 +190,7 @@
           <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
-          <template #default="{ row }">{{ money(row.unitPrice) }}</template>
+          <template #default="{ row }">{{ money(row.unitPrice, 4) }}</template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('amount')" :label="t('ordersPage.amount')" width="120" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
@@ -199,7 +199,7 @@
           <template #default="{ row }">{{ money(row.refundAmount) }}</template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="120" align="center">
-          <template #default="{ row }">{{ t(`ordersPage.statuses.${row.status}`) }}</template>
+          <template #default="{ row }">{{ t(`ordersPage.statuses.${row.status}`) }} <ReservedOrderTag :order="row" /></template>
         </el-table-column>
         <el-table-column v-if="isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.expectedCompletedAt) }}</template>
@@ -216,18 +216,24 @@
         <el-table-column v-if="isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('actions')" :label="t('ordersPage.actions')" width="190" fixed="right" align="center">
+        <el-table-column v-if="isColumnVisible('actions')" :label="t('ordersPage.actions')" :width="locale === 'zh-CN' ? 240 : 360" fixed="right" align="center">
           <template #default="{ row }">
-            <div class="row-actions">
+            <div class="order-row-actions pending-row-actions">
               <el-button class="action-detail" size="small" text type="primary" :icon="View" @click="viewDetail(row)">
                 {{ t('ordersPage.actionDetail') }}
               </el-button>
-              <el-button class="action-confirm" size="small" type="primary" :icon="Check" @click="confirmOrder(row)">
+              <el-button size="small" type="primary" :icon="Check" @click="confirmOrder(row)">
                 {{ t('ordersPage.actionConfirm') }}
               </el-button>
-              <el-button class="action-cancel" size="small" type="danger" plain @click="cancelOrder(row)">
-                {{ t('ordersPage.actionCancel') }}
-              </el-button>
+              <el-dropdown trigger="click">
+                <el-button size="small" :icon="MoreFilled" :aria-label="t('ordersPage.actionMore')">{{ t('ordersPage.actionMore') }}</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :icon="Edit" v-if="['PENDING_CONFIRM', 'PENDING_EXECUTION'].includes(row.status) && editAuth.hasPermission('order:create')" @click="router.push({ name: 'admin-order-edit', query: { orderId: String(row.id) } })">{{ t('ordersPage.editOrder') }}</el-dropdown-item>
+                    <el-dropdown-item :icon="Delete" class="danger-menu-item" :divided="['PENDING_CONFIRM', 'PENDING_EXECUTION'].includes(row.status) && editAuth.hasPermission('order:create')" @click="cancelOrder(row)">{{ t('ordersPage.actionCancel') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
@@ -249,11 +255,16 @@
 </template>
 
 <script setup lang="ts">
+import { orderModuleLabel } from '@/utils/orderModuleLabel'
+import { formatCurrency } from '@/utils/presentation'
+import { useAuthStore } from '@/stores/auth'
+import ReservedOrderTag from '@/components/ReservedOrderTag.vue'
+import { formatOrderSchedule } from '@/utils/orderTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Delete, Download, Refresh, Search, View } from '@element-plus/icons-vue'
+import { MoreFilled, Check, Delete, Download, Edit, Refresh, Search, View } from '@element-plus/icons-vue'
 import { batchConfirmAdminOrders, cancelAdminOrder, confirmAdminOrder, getAdminOrdersPage, type Order, type OrderType } from '@/api/orders'
 import { getAdminApps, type CustomerApp, type StoreType } from '@/api/applications'
 import { getAdminCustomers, type CustomerAccount } from '@/api/customers'
@@ -263,7 +274,8 @@ import { usePersistentTableColumns } from '@/composables/usePersistentTableColum
 import { exportOrdersCsv } from '@/utils/orderExport'
 
 const router = useRouter()
-const { t } = useI18n()
+const editAuth = useAuthStore()
+const { t, locale } = useI18n()
 
 const defaultColumnKeys = ['app', 'customer', 'type', 'amount', 'createdAt', 'actions']
 const allColumnKeys = [
@@ -551,7 +563,7 @@ function typeLabel(type?: string | null) {
 }
 
 function orderTypeLabel(order: Order) {
-  return order.orderModuleName?.trim() || typeLabel(order.orderType)
+  return orderModuleLabel(order)
 }
 
 function statusLabel(status?: string | null) {
@@ -595,9 +607,7 @@ function valueOrDash(value?: number | string | null) {
   return value === null || value === undefined || value === '' ? '-' : value
 }
 
-function money(value?: number | null) {
-  return value === null || value === undefined ? '-' : `$${Number(value).toFixed(2)}`
-}
+const money = formatCurrency
 </script>
 
 <style scoped>
@@ -820,44 +830,17 @@ function money(value?: number | null) {
   line-height: 16px;
 }
 
-.row-actions {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: center;
-  justify-content: center;
-  gap: 6px 8px;
-}
 
-.row-actions :deep(.el-button) {
-  min-width: 0;
-  height: 28px;
-  margin-left: 0;
-  padding: 5px 8px;
-  justify-content: center;
-}
 
-.row-actions :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
 
-.row-actions .action-detail {
-  width: 100%;
-  padding-right: 8px;
-  padding-left: 8px;
-  border-radius: 6px;
-  background: #eff6ff;
-}
 
-.row-actions .action-confirm,
-.row-actions .action-cancel {
-  width: 100%;
-}
 
-.row-actions .action-cancel {
-  grid-column: auto;
-  grid-row: auto;
-}
+
+
+
+
+
+
 
 .app-option {
   display: grid;

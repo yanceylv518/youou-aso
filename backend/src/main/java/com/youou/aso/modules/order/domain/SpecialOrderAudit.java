@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SpecialOrderAudit {
+    private Long orderModuleId;
+    public Long getOrderModuleId() { return orderModuleId; }
+    public void setOrderModuleId(Long value) { orderModuleId=value; }
     private Long id;
     private String auditNo;
     private Long customerId;

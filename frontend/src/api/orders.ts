@@ -27,6 +27,7 @@ export interface OrderItem {
 }
 
 export interface OrderEvent {
+  reason?: string | null
   id: number
   eventType: 'PAUSED' | 'UPDATED' | 'RESUMED' | string
   quantityBefore: number | null
@@ -56,12 +57,14 @@ export interface Order {
   orderType: OrderType
   orderModuleId: number | null
   orderModuleName: string | null
+  orderModuleNames?: Partial<Record<import('@/i18n').AppLocale, string>>
   storeType: StoreType
   regionCode: string
   appIdentifier: string
   appName: string
   appIconUrl: string | null
   status: OrderStatus
+  scheduledStartAt?: string | null
   orderStartDate: string
   orderEndDate: string
   executionHours: number | null
@@ -102,6 +105,8 @@ export interface CreateOrderPayload {
   customerAppId: number
   regionCode?: string | null
   orderType: OrderType
+  scheduledStartAt?: string | null
+  startImmediately?: boolean
   startDate: string
   endDate: string
   executionHours?: number | null
@@ -183,6 +188,11 @@ export async function payCustomerOrder(id: number) {
   return response.data.data
 }
 
+export async function editAdminOrder(id: number, payload: AdminCreateOrderPayload) {
+  const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/edit`, payload)
+  return response.data.data
+}
+
 export async function createAdminOrderForCustomer(payload: AdminCreateOrderPayload) {
   const response = await http.post<ApiResponse<AdminCreateOrderResult>>('/admin/orders/create-for-customer', payload)
   return response.data.data
@@ -222,6 +232,16 @@ export async function executeAdminOrder(id: number) {
 
 export async function pauseAdminOrder(id: number) {
   const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/pause`)
+  return response.data.data
+}
+
+export async function adjustCompletedAdminOrder(id: number, items: Array<{ itemId: number; quantity: number; completedQuantity: number }>, reason: string) {
+  const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/completed-items`, { items, reason })
+  return response.data.data
+}
+
+export async function closePausedAdminOrder(id: number, items: Array<{ itemId: number; quantity: number; completedQuantity: number }>) {
+  const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/close`, { items })
   return response.data.data
 }
 

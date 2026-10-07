@@ -125,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCurrency } from '@/utils/presentation'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -217,13 +218,7 @@ function avatarText(username: string) {
   return username.slice(0, 1).toUpperCase()
 }
 
-function formatMoney(value: string | number | undefined | null) {
-  if (value === undefined || value === null || value === '') return '-'
-  return `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`
-}
+const formatMoney = formatCurrency
 
 function formatDate(value: string | undefined | null) {
   return value ? value.replace('T', ' ') : '-'

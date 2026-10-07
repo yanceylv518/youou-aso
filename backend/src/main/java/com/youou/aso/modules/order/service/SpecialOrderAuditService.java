@@ -11,6 +11,8 @@ import com.youou.aso.modules.appmanagement.repository.CustomerAppRepository;
 import com.youou.aso.modules.appmanagement.repository.MarketRegionRepository;
 import com.youou.aso.modules.order.domain.AsoOrder;
 import com.youou.aso.modules.order.domain.OrderItem;
+import com.youou.aso.modules.order.domain.OrderEvent;
+import com.youou.aso.modules.order.repository.OrderEventRepository;
 import com.youou.aso.modules.order.domain.OrderStatus;
 import com.youou.aso.modules.order.domain.OrderType;
 import com.youou.aso.modules.order.domain.SpecialAuditStatus;
@@ -45,6 +47,19 @@ public class SpecialOrderAuditService {
     private static final Logger log = LoggerFactory.getLogger(SpecialOrderAuditService.class);
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.youou.aso.modules.pricing.service.OrderModuleConfigService moduleService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.youou.aso.modules.pricing.repository.PricingConfigRepository modulePricing;
+
+    private com.youou.aso.modules.pricing.domain.OrderModuleConfig validateModule(Long id, OrderType type, com.youou.aso.modules.appmanagement.domain.StoreType store, List<SpecialOrderAuditItem> items) {
+        if (id==null) return null; // Historic audits created before module configuration.
+        if (items.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        var module=moduleService.requireEnabled(id,type);
+        var allowed=modulePricing.findModuleRegions(id);
+        if (!module.storeTypes().contains(store) || items.stream().anyMatch(item -> !allowed.contains(item.getRegionCode()))) throw new BusinessException(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+        return module;
+    }
     private final CustomerAppRepository customerAppRepository;
     private final MarketRegionRepository marketRegionRepository;
     private final SpecialOrderAuditRepository specialOrderAuditRepository;
@@ -54,6 +69,7 @@ public class SpecialOrderAuditService {
     private final WalletService walletService;
     private final OrderNotificationSender orderNotificationSender;
     private final Clock clock;
+    private final OrderEventRepository orderEventRepository;
 
     public SpecialOrderAuditService(
             CustomerAppRepository customerAppRepository,
@@ -64,7 +80,8 @@ public class SpecialOrderAuditService {
             OrderItemRepository orderItemRepository,
             WalletService walletService,
             OrderNotificationSender orderNotificationSender,
-            Clock clock
+            Clock clock,
+            OrderEventRepository orderEventRepository
     ) {
         this.customerAppRepository = customerAppRepository;
         this.marketRegionRepository = marketRegionRepository;
@@ -75,6 +92,7 @@ public class SpecialOrderAuditService {
         this.walletService = walletService;
         this.orderNotificationSender = orderNotificationSender;
         this.clock = clock;
+        this.orderEventRepository = orderEventRepository;
     }
 
     @Transactional
@@ -97,6 +115,7 @@ public class SpecialOrderAuditService {
         audit.setCustomerId(customerId);
         audit.setCustomerAppId(app.getId());
         audit.setOrderType(command.orderType());
+        audit.setOrderModuleId(command.orderModuleId());
         audit.setStoreType(app.getStoreType());
         audit.setRegionCode(regionCode);
         audit.setAppIdentifier(app.getAppIdentifier());
@@ -106,9 +125,10 @@ public class SpecialOrderAuditService {
         audit.setContactType(normalizeOptional(command.contactType(), 32));
         audit.setContactValue(normalizeOptional(command.contactValue(), 128));
         audit.setStatus(SpecialAuditStatus.PENDING_REVIEW);
-        SpecialOrderAudit saved = specialOrderAuditRepository.save(audit);
         List<SpecialOrderAuditItem> items = auditItems(command.items(), command.orderType(), app, regionCode);
         validateRegionCombination(items.stream().map(SpecialOrderAuditItem::getRegionCode).toList());
+        validateModule(audit.getOrderModuleId(),audit.getOrderType(),app.getStoreType(),items);
+        SpecialOrderAudit saved = specialOrderAuditRepository.save(audit);
         specialOrderAuditItemRepository.saveAll(saved.getId(), items);
         saved.setItems(items);
         return saved;
@@ -151,6 +171,10 @@ public class SpecialOrderAuditService {
             String contactValue,
             BigDecimal amount
     ) {
+        return submitAdminSpecialOrder(customerId,adminId,customerAppId,regionCode,orderType,items,contactType,contactValue,amount,null);
+    }
+    @Transactional
+    public AdminSpecialOrderSubmission submitAdminSpecialOrder(Long customerId, Long adminId, Long customerAppId, String regionCode, OrderType orderType, List<SubmitSpecialAuditCommand.AuditItem> items, String contactType, String contactValue, BigDecimal amount, Long orderModuleId) {
         if (customerId == null || customerAppId == null || orderType == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -165,7 +189,8 @@ public class SpecialOrderAuditService {
         String content = defaultAdminSpecialContent(orderType, app);
         List<SpecialOrderAuditItem> auditItems = auditItems(items, orderType, app, resolvedRegionCode);
         validateRegionCombination(auditItems.stream().map(SpecialOrderAuditItem::getRegionCode).toList());
-        BigDecimal calculatedAmount = isRankGuaranteeType(orderType) ? calculateItemPricing(auditItems) : amount;
+        validateModule(orderModuleId,orderType,app.getStoreType(),auditItems);
+        BigDecimal calculatedAmount = supportsItemPricing(orderType) ? calculateItemPricing(auditItems) : amount;
         if (calculatedAmount == null || calculatedAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
         }
@@ -175,6 +200,7 @@ public class SpecialOrderAuditService {
         audit.setCustomerId(customerId);
         audit.setCustomerAppId(app.getId());
         audit.setOrderType(orderType);
+        audit.setOrderModuleId(orderModuleId);
         audit.setStoreType(app.getStoreType());
         audit.setRegionCode(resolvedRegionCode);
         audit.setAppIdentifier(app.getAppIdentifier());
@@ -209,7 +235,7 @@ public class SpecialOrderAuditService {
 
     @Transactional
     public SpecialOrderAudit reviewAudit(Long auditId, Long adminId, ReviewSpecialAuditCommand command) {
-        SpecialOrderAudit audit = specialOrderAuditRepository.findById(auditId)
+        SpecialOrderAudit audit = specialOrderAuditRepository.findByIdForUpdate(auditId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SPECIAL_AUDIT_NOT_FOUND));
         if (!SpecialAuditStatus.PENDING_REVIEW.equals(audit.getStatus())) {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_STATUS_INVALID);
@@ -219,7 +245,7 @@ public class SpecialOrderAuditService {
         }
 
         BigDecimal finalPrice;
-        if (isRankGuaranteeType(audit.getOrderType())) {
+        if (supportsItemPricing(audit.getOrderType())) {
             List<SpecialOrderAuditItem> items = specialOrderAuditItemRepository.findByAuditIds(List.of(auditId))
                     .getOrDefault(auditId, List.of());
             if (items.isEmpty()) {
@@ -237,12 +263,18 @@ public class SpecialOrderAuditService {
               for (SpecialOrderAuditItem item : items) {
                 ReviewSpecialAuditCommand.ItemPricing pricing = pricingById.get(item.getId());
                 if (pricing == null) throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
+                validUnitPrice(pricing.unitPrice());
+                validExecutionDays(pricing.executionDays());
+              }
+              for (SpecialOrderAuditItem item : items) {
+                ReviewSpecialAuditCommand.ItemPricing pricing = pricingById.get(item.getId());
                 item.setUnitPrice(validUnitPrice(pricing.unitPrice()));
                 item.setExecutionDays(validExecutionDays(pricing.executionDays()));
                 specialOrderAuditItemRepository.updatePricing(item.getId(), item.getUnitPrice(), item.getExecutionDays());
               }
               finalPrice = calculateItemPricing(items);
             }
+            audit.setItems(items);
         } else {
             finalPrice = command.negotiatedPrice();
             if (finalPrice == null || finalPrice.compareTo(BigDecimal.ZERO) <= 0) {
@@ -260,7 +292,7 @@ public class SpecialOrderAuditService {
 
     @Transactional
     public SpecialOrderAudit cancelAudit(Long auditId, Long adminId, String reason) {
-        SpecialOrderAudit audit = specialOrderAuditRepository.findById(auditId)
+        SpecialOrderAudit audit = specialOrderAuditRepository.findByIdForUpdate(auditId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SPECIAL_AUDIT_NOT_FOUND));
         if (SpecialAuditStatus.SUBMITTED.equals(audit.getStatus())) {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_LOCKED);
@@ -276,7 +308,7 @@ public class SpecialOrderAuditService {
 
     @Transactional
     public AsoOrder submitApprovedAudit(Long customerId, Long auditId) {
-        SpecialOrderAudit audit = specialOrderAuditRepository.findById(auditId)
+        SpecialOrderAudit audit = specialOrderAuditRepository.findByIdForUpdate(auditId)
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SPECIAL_AUDIT_NOT_FOUND));
         if (!SpecialAuditStatus.APPROVED_WAIT_SUBMIT.equals(audit.getStatus())) {
@@ -286,6 +318,14 @@ public class SpecialOrderAuditService {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
         }
 
+        var module=validateModule(audit.getOrderModuleId(),audit.getOrderType(),audit.getStoreType(),specialOrderAuditItemRepository.findByAuditIds(List.of(audit.getId())).getOrDefault(audit.getId(),List.of()));
+        int executionDays = specialOrderAuditItemRepository.findByAuditIds(List.of(audit.getId()))
+                .getOrDefault(audit.getId(), List.of()).stream()
+                .map(SpecialOrderAuditItem::getExecutionDays)
+                .filter(days -> days != null)
+                .mapToInt(this::validExecutionDays)
+                .max()
+                .orElse(1);
         WalletDebitResult debit = walletService.debitForOrder(
                 customerId,
                 audit.getNegotiatedPrice(),
@@ -299,6 +339,8 @@ public class SpecialOrderAuditService {
         order.setCustomerAppId(audit.getCustomerAppId());
         order.setSourceAuditId(audit.getId());
         order.setOrderType(audit.getOrderType());
+        order.setOrderModuleId(audit.getOrderModuleId());
+        order.setOrderModuleName(module == null ? null : module.moduleName());
         order.setStoreType(audit.getStoreType());
         order.setRegionCode(audit.getRegionCode());
         order.setAppIdentifier(audit.getAppIdentifier());
@@ -306,15 +348,15 @@ public class SpecialOrderAuditService {
         order.setAppIconUrl(audit.getAppIconUrl());
         order.setStatus(OrderStatus.PENDING_CONFIRM);
         order.setOrderStartDate(orderDate);
-        order.setOrderEndDate(orderDate);
-        order.setTotalDays(1);
+        order.setOrderEndDate(orderDate.plusDays(executionDays - 1L));
+        order.setTotalDays(executionDays);
         order.setQuantity(1);
         order.setUnitPrice(audit.getNegotiatedPrice());
         order.setTotalAmount(audit.getNegotiatedPrice());
         order.setBalanceBefore(debit.balanceBefore());
         order.setBalanceAfter(debit.balanceAfter());
         order.setDeductedTransactionId(debit.transactionId());
-        order.setExpectedCompletedAt(orderDate.plusDays(1).atStartOfDay());
+        order.setExpectedCompletedAt(order.getOrderEndDate().plusDays(1).atStartOfDay());
 
         AsoOrder saved = orderRepository.save(order);
         walletService.linkTransactionToOrder(debit.transactionId(), saved.getId());
@@ -326,8 +368,81 @@ public class SpecialOrderAuditService {
         audit.setSubmittedOrderId(saved.getId());
         audit.setSubmittedAt(now());
         specialOrderAuditRepository.update(audit);
+        OrderEvent event = new OrderEvent();
+        event.setOrderId(saved.getId());
+        event.setEventType("CREATED");
+        event.setAmountAfter(saved.getTotalAmount());
+        orderEventRepository.save(event);
         notifyOrderCreated(saved);
         return saved;
+    }
+
+    @Transactional
+    public AsoOrder editSubmittedOrder(Long orderId, Long customerId, Long adminId, Long appId,
+                                       OrderType type, List<SubmitSpecialAuditCommand.AuditItem> inputs) {
+        if (adminId == null) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        AsoOrder order = orderRepository.findByIdForUpdate(orderId)
+                .filter(candidate -> candidate.getCustomerId().equals(customerId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (order.getSourceAuditId() == null || (order.getStatus() != OrderStatus.PENDING_CONFIRM
+                && order.getStatus() != OrderStatus.PENDING_EXECUTION)) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        }
+        if (!order.getCustomerAppId().equals(appId) || order.getOrderType() != type) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        if (orderItemRepository.findByOrderIds(List.of(orderId)).getOrDefault(orderId, List.of()).stream()
+                .anyMatch(item -> item.getCompletedQuantity() != null)) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        }
+        SpecialOrderAudit audit = specialOrderAuditRepository.findById(order.getSourceAuditId())
+                .filter(candidate -> orderId.equals(candidate.getSubmittedOrderId()) && candidate.getStatus() == SpecialAuditStatus.SUBMITTED)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SPECIAL_AUDIT_STATUS_INVALID));
+        CustomerApp app = customerAppRepository.findById(appId)
+                .filter(candidate -> customerId.equals(candidate.getCustomerId()) && candidate.getStatus() == CustomerAppStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
+        List<SpecialOrderAuditItem> items = auditItems(inputs, type, app, audit.getRegionCode());
+        validateRegionCombination(items.stream().map(SpecialOrderAuditItem::getRegionCode).toList());
+        validateModule(audit.getOrderModuleId(),audit.getOrderType(),app.getStoreType(),items);
+        BigDecimal amount = calculateItemPricing(items);
+        BigDecimal oldAmount = order.getTotalAmount();
+        BigDecimal difference = amount.subtract(oldAmount);
+        if (difference.signum() != 0) {
+            WalletDebitResult adjustment = difference.signum() > 0
+                    ? walletService.debitForOrder(customerId, difference, "ORDER_EDIT_INCREASE:" + order.getOrderNo())
+                    : walletService.refundForOrder(customerId, difference.abs(), "ORDER_EDIT_DECREASE:" + order.getOrderNo());
+            order.setBalanceBefore(adjustment.balanceBefore());
+            order.setBalanceAfter(adjustment.balanceAfter());
+            walletService.linkTransactionToOrder(adjustment.transactionId(), orderId);
+        }
+        int days = items.stream().mapToInt(item -> validExecutionDays(item.getExecutionDays())).max().orElse(1);
+        java.util.Set<String> regions = items.stream().map(SpecialOrderAuditItem::getRegionCode).collect(java.util.stream.Collectors.toSet());
+        String region = regions.size() == 1 ? regions.iterator().next() : "MULTI";
+        audit.setRegionCode(region);
+        order.setRegionCode(region);
+        audit.setNegotiatedPrice(amount);
+        specialOrderAuditRepository.update(audit);
+        specialOrderAuditItemRepository.deleteByAuditId(audit.getId());
+        specialOrderAuditItemRepository.saveAll(audit.getId(), items);
+        order.setUnitPrice(amount);
+        order.setTotalAmount(amount);
+        order.setTotalDays(days);
+        order.setOrderEndDate(order.getOrderStartDate().plusDays(days - 1L));
+        order.setExpectedCompletedAt(order.getOrderEndDate().plusDays(1).atStartOfDay());
+        AsoOrder updated = orderRepository.updatePaymentDraft(order);
+        OrderItem item = specialOrderItem(audit);
+        orderItemRepository.deleteByOrderId(orderId);
+        orderItemRepository.saveAll(orderId, List.of(item));
+        updated.setItems(List.of(item));
+        OrderEvent event = new OrderEvent();
+        event.setOrderId(orderId);
+        event.setEventType("UPDATED");
+        event.setAmountBefore(oldAmount);
+        event.setAmountAfter(amount);
+        event.setCreatedByAdminId(adminId);
+        event.setCreatedAt(now());
+        orderEventRepository.save(event);
+        return updated;
     }
 
     private void notifyOrderCreated(AsoOrder order) {
@@ -474,7 +589,7 @@ public class SpecialOrderAuditService {
                     result.setChartType(chartType);
                     result.setTargetRank(isRankGuaranteeType(orderType) ? targetRank : null);
                     result.setCoverageNote(normalizeLength(item.coverageNote(), 500, false));
-                    if (isRankGuaranteeType(orderType) && (item.unitPrice() != null || item.executionDays() != null)) {
+                    if (supportsItemPricing(orderType) && (item.unitPrice() != null || item.executionDays() != null)) {
                         result.setUnitPrice(validUnitPrice(item.unitPrice()));
                         result.setExecutionDays(validExecutionDays(item.executionDays()));
                     }
@@ -530,6 +645,10 @@ public class SpecialOrderAuditService {
     }
     private boolean isRankGuaranteeType(OrderType orderType) {
         return orderType == OrderType.RANK_GUARANTEE || orderType == OrderType.CHART_RANK_GUARANTEE;
+    }
+
+    private boolean supportsItemPricing(OrderType orderType) {
+        return isRankGuaranteeType(orderType) || orderType == OrderType.KEYWORD_COVERAGE;
     }
 
     private String defaultAdminSpecialContent(OrderType orderType, CustomerApp app) {

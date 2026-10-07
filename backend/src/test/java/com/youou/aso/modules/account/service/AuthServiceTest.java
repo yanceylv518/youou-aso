@@ -55,6 +55,20 @@ class AuthServiceTest {
     );
 
     @Test
+    void publicRegistrationCannotShadowAdminUsernameEmailOrLoginIdentifier() {
+        AdminAccount admin = new AdminAccount();
+        admin.setUsername("existing_admin"); admin.setEmail("admin@example.com");
+        adminRepository.save(admin);
+        for (var command : List.of(
+                new RegisterCustomerCommand("existing_admin", "other@example.com", "StrongPass123"),
+                new RegisterCustomerCommand("different", "admin@example.com", "StrongPass123"),
+                new RegisterCustomerCommand("admin@example.com", "other@example.com", "StrongPass123"))) {
+            assertThatThrownBy(() -> authService.registerCustomer(command)).isInstanceOf(BusinessException.class);
+        }
+        assertThat(customerRepository.findByUsernameOrEmail("other@example.com")).isEmpty();
+    }
+
+    @Test
     void registerCustomerCreatesEnabledCustomerAndWallet() {
         var result = authService.registerCustomer(new RegisterCustomerCommand(
                 "demo_user",

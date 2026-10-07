@@ -19,7 +19,7 @@
           <h1>{{ audit.appName }}</h1>
           <p>{{ typeLabel(audit.orderType) }}</p>
         </div>
-        <el-tag :type="statusType(audit.status)" effect="light">{{ t(`specialAudit.statuses.${audit.status}`) }}</el-tag>
+        <el-tag class="order-status-tag" :type="statusType(audit.status)" effect="light">{{ t(`specialAudit.statuses.${audit.status}`) }}</el-tag>
       </section>
 
       <div class="detail-grid">
@@ -27,7 +27,7 @@
           <h2>{{ t('orderDetail.basicInfo') }}</h2>
           <dl class="info-list">
             <div><dt>{{ t('ordersPage.store') }}</dt><dd>{{ storeLabel(audit.storeType) }}</dd></div>
-            <div><dt>{{ t('ordersPage.region') }}</dt><dd>{{ audit.regionCode || '-' }}</dd></div>
+            <div><dt>{{ t('ordersPage.region') }}</dt><dd>{{ localizedRegion(audit.regionCode || '', locale) || '-' }}</dd></div>
             <div v-if="isAdmin"><dt>{{ t('orderDetail.customer') }}</dt><dd>{{ audit.customerId }}</dd></div>
             <div><dt>{{ t('ordersPage.createdAt') }}</dt><dd>{{ formatDateTime(audit.createdAt) }}</dd></div>
             <div><dt>{{ t('ordersPage.status') }}</dt><dd>{{ t(`specialAudit.statuses.${audit.status}`) }}</dd></div>
@@ -60,24 +60,21 @@
       <section v-if="audit.items?.length" class="detail-card">
         <h2>{{ t('orderDetail.itemDetails') }}</h2>
         <el-table :data="audit.items" class="detail-table">
-          <el-table-column prop="regionCode" :label="t('ordersPage.region')" min-width="120" />
-          <el-table-column :label="audit.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keyword')" min-width="220">
+          <el-table-column :label="t('ordersPage.region')" min-width="160"><template #default="{row}">{{localizedRegion(row.regionCode,locale)}}</template></el-table-column>
+          <el-table-column :label="audit.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keywords')" min-width="220">
             <template #default="{ row }">{{ audit.orderType === 'CHART_RANK_GUARANTEE' ? (row.chartType || row.keyword || '-') : (row.keyword || '-') }}</template>
           </el-table-column>
           <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(audit.orderType)" :label="t('orderCreate.targetRank')" min-width="140">
             <template #default="{ row }">{{ row.targetRank ?? '-' }}</template>
           </el-table-column>
-          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(audit.orderType)" :label="t('orderCreate.unitPrice')" min-width="120" align="right">
-            <template #default="{ row }">{{ row.unitPrice == null ? '-' : `$${Number(row.unitPrice).toFixed(2)}` }}</template>
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(audit.orderType)" :label="t('orderCreate.unitPrice')" min-width="120" align="right">
+            <template #default="{ row }">{{ row.unitPrice == null ? '-' : `$${Number(row.unitPrice).toFixed(4)}` }}</template>
           </el-table-column>
-          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(audit.orderType)" :label="t('orderCreate.executionDays')" min-width="100" align="right">
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(audit.orderType)" :label="t('orderCreate.executionDays')" min-width="100" align="right">
             <template #default="{ row }">{{ row.executionDays ?? '-' }}</template>
           </el-table-column>
-          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(audit.orderType)" :label="t('ordersPage.amount')" min-width="120" align="right">
+          <el-table-column v-if="['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE', 'KEYWORD_COVERAGE'].includes(audit.orderType)" :label="t('ordersPage.amount')" min-width="120" align="right">
             <template #default="{ row }">{{ row.amount == null ? '-' : `$${Number(row.amount).toFixed(2)}` }}</template>
-          </el-table-column>
-          <el-table-column v-if="audit.orderType === 'KEYWORD_COVERAGE'" :label="t('orderCreate.currentRank')" min-width="240">
-            <template #default="{ row }">{{ row.coverageNote || '-' }}</template>
           </el-table-column>
         </el-table>
       </section>
@@ -86,6 +83,7 @@
 </template>
 
 <script setup lang="ts">
+import { localizedRegion, formatCurrency, statusTone } from '@/utils/presentation'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -95,7 +93,7 @@ import { getAdminSpecialAudit, getCustomerSpecialAudit, type SpecialAuditStatus,
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const loading = ref(false)
 const audit = ref<SpecialOrderAudit | null>(null)
 const loadFailed = ref(false)
@@ -124,12 +122,7 @@ function storeLabel(store: string) {
   return 'App Store'
 }
 
-function statusType(status: SpecialAuditStatus) {
-  if (status === 'CANCELLED') return 'danger'
-  if (status === 'APPROVED_WAIT_SUBMIT') return 'warning'
-  if (status === 'SUBMITTED') return 'success'
-  return 'info'
-}
+const statusType = statusTone
 
 function formatDateTime(value: string | null) {
   return value ? value.replace('T', ' ') : '-'
@@ -140,10 +133,10 @@ function formatDateTime(value: string | null) {
 .audit-detail-page { display: grid; gap: 18px; }
 .detail-toolbar { display: flex; justify-content: space-between; }
 .hero-card, .detail-card { background: #fff; border: 1px solid #dfe7f2; border-radius: 14px; box-shadow: 0 12px 30px rgba(36, 64, 104, .07); }
-.hero-card { display: flex; align-items: center; gap: 16px; padding: 24px; }
+.hero-card { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 24px; }
 .app-icon { width: 58px; height: 58px; flex: 0 0 58px; border-radius: 14px; display: grid; place-items: center; overflow: hidden; color: #2468f2; font-size: 22px; font-weight: 700; background: #eef5ff; }
 .app-icon img { width: 100%; height: 100%; object-fit: cover; }
-.hero-copy { min-width: 0; flex: 1; }
+.hero-copy { min-width: 0; flex: 1 1 200px; overflow-wrap: anywhere; }
 .eyebrow { color: #67809f; font-size: 13px; }
 .hero-copy h1 { margin: 5px 0 3px; color: #142033; font-size: 24px; }
 .hero-copy p { margin: 0; color: #5d708d; }

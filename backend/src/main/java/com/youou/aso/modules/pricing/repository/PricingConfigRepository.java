@@ -16,6 +16,11 @@ public interface PricingConfigRepository {
 
     void saveAll(List<PricingConfig> configs);
 
+    default List<String> findModuleRegions(Long moduleId) { return List.of(); }
+    default Map<String, BigDecimal> findModulePrices(Long moduleId, PriceCode code) { return Map.of(); }
+    default void replaceModuleRegions(Long moduleId, List<String> regions) { }
+    default void replaceModulePrices(Long moduleId, PriceCode code, Map<String, BigDecimal> prices) { }
+
     default List<String> findAllowedRegionCodes(OrderType orderType) { return List.of(); }
 
     default boolean hasRegionConfiguration(OrderType orderType) { return false; }

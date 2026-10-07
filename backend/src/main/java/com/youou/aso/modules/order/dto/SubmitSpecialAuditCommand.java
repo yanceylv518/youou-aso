@@ -11,8 +11,9 @@ public record SubmitSpecialAuditCommand(
         String requestedContent,
         String contactType,
         String contactValue,
-        List<AuditItem> items
+        List<AuditItem> items, Long orderModuleId
 ) {
+    public SubmitSpecialAuditCommand(Long appId, String region, OrderType type, String content, String contactType, String contactValue, List<AuditItem> items) { this(appId,region,type,content,contactType,contactValue,items,null); }
     public SubmitSpecialAuditCommand(Long customerAppId, OrderType orderType, String requestedContent) {
         this(customerAppId, null, orderType, requestedContent, null, null, null);
     }

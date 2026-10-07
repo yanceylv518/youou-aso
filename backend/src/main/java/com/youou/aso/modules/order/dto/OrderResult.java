@@ -42,7 +42,9 @@ public record OrderResult(
         LocalDateTime createdAt,
         List<OrderItemResult> items,
         List<OrderCommentDetailResult> commentDetails,
-        List<OrderEventResult> events
+        List<OrderEventResult> events,
+        LocalDateTime scheduledStartAt,
+        java.util.Map<String, String> orderModuleNames
 ) {
     public static OrderResult from(AsoOrder order) {
         return new OrderResult(
@@ -77,7 +79,9 @@ public record OrderResult(
                 order.getCreatedAt(),
                 order.getItems().stream().map(OrderItemResult::from).toList(),
                 List.of(),
-                order.getEvents().stream().map(OrderEventResult::from).toList()
+                order.getEvents().stream().map(OrderEventResult::from).toList(),
+                order.getScheduledStartAt(),
+                order.getOrderModuleNames()
         );
     }
 }

@@ -1,6 +1,6 @@
 <template>
   <section class="auth-page">
-    <el-form class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
+    <el-form ref="formRef" :rules="rules" scroll-to-error class="auth-panel" :model="form" label-position="top" @submit.prevent="submit">
       <div class="auth-brand">
         <img class="brand-mark" :src="systemLogo" alt="" />
         <span>{{ t('app.name') }}</span>
@@ -9,10 +9,10 @@
         <h1>{{ t('auth.forgotTitle') }}</h1>
         <p>{{ t('auth.forgotSubtitle') }}</p>
       </header>
-      <el-form-item :label="t('auth.email')">
+      <el-form-item prop="email" :label="t('auth.email')">
         <el-input v-model="form.email" autocomplete="email" size="large" />
       </el-form-item>
-      <el-form-item :label="t('auth.resetCode')">
+      <el-form-item prop="code" :label="t('auth.resetCode')">
         <div class="code-row">
           <el-input v-model="form.code" maxlength="6" inputmode="numeric" size="large" :placeholder="t('auth.resetCodePlaceholder')" />
           <el-button native-type="button" size="large" :loading="sendingCode" :disabled="countdown > 0" @click="sendCode">
@@ -20,10 +20,11 @@
           </el-button>
         </div>
       </el-form-item>
-      <el-form-item :label="t('auth.newPassword')">
+      <el-form-item prop="newPassword" :label="t('auth.newPassword')">
         <el-input v-model="form.newPassword" type="password" autocomplete="new-password" show-password size="large" />
+      <small class="password-hint">{{ t('auth.passwordTooShort') }}</small>
       </el-form-item>
-      <el-form-item :label="t('auth.confirmNewPassword')">
+      <el-form-item prop="confirmPassword" :label="t('auth.confirmNewPassword')">
         <el-input v-model="form.confirmPassword" type="password" autocomplete="new-password" show-password size="large" />
       </el-form-item>
       <el-button type="primary" native-type="submit" class="full-width" size="large" :loading="submitting">
@@ -37,6 +38,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed, nextTick } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { onBeforeUnmount, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
@@ -82,7 +85,22 @@ async function sendCode() {
   }
 }
 
+
+const formRef = ref<FormInstance>()
+const rules = computed<FormRules>(() => ({
+  email: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }, { type:'email', message:t('auth.invalidEmail'), trigger:'blur' }],
+  code: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }, { pattern:/^\d{6}$/, message:t('auth.invalidResetCode'), trigger:'blur' }],
+  newPassword: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }, { min:8, message:t('auth.passwordTooShort'), trigger:'blur' }],
+  confirmPassword: [{ required:true, whitespace:true, message:t('visual.required'), trigger:'blur' }, { validator:(_rule,value,callback)=>callback(value===form.newPassword ? undefined : new Error(t('auth.passwordMismatch'))), trigger:'blur' }],
+}))
+async function validateForm() {
+ const valid = await formRef.value?.validate().catch(() => false)
+ if(!valid){await nextTick();formRef.value?.$el.querySelector('.is-error input')?.focus()}
+ return valid
+}
+
 async function submit() {
+  if (!await validateForm()) return
   const email = normalizedEmail()
   if (!email || !form.code.trim() || !form.newPassword || !form.confirmPassword) {
     ElMessage.warning(t('auth.requiredFields'))
@@ -273,5 +291,6 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+.password-hint { display:block; color:#64748b; margin-top:6px; line-height:1.5; }
 </style>
 

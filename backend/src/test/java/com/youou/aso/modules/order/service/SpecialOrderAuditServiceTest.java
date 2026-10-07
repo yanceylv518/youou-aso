@@ -25,6 +25,10 @@ import com.youou.aso.modules.order.repository.SpecialOrderAuditRepository;
 import com.youou.aso.modules.wallet.service.WalletDebitResult;
 import com.youou.aso.modules.wallet.service.WalletService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -37,6 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -62,8 +67,28 @@ class SpecialOrderAuditServiceTest {
             orderItemRepository,
             walletService,
             orderNotificationSender,
-            CLOCK
+            CLOCK,
+            org.mockito.Mockito.mock(com.youou.aso.modules.order.repository.OrderEventRepository.class)
     );
+
+    @Test void specialAuditHonorsModuleStoresAndCountries() {
+        var modules=org.mockito.Mockito.mock(com.youou.aso.modules.pricing.service.OrderModuleConfigService.class);
+        var pricing=org.mockito.Mockito.mock(com.youou.aso.modules.pricing.repository.PricingConfigRepository.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"moduleService",modules);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"modulePricing",pricing);
+        var module=new com.youou.aso.modules.pricing.domain.OrderModuleConfig(55L,"a","a","a","a","a","d","d","d","d","d",OrderType.KEYWORD_COVERAGE,null,null,true,1,List.of(StoreType.GOOGLE_PLAY));
+        org.mockito.Mockito.when(modules.requireEnabled(55L,OrderType.KEYWORD_COVERAGE)).thenReturn(module);
+        org.mockito.Mockito.when(pricing.findModuleRegions(55L)).thenReturn(List.of("US"));
+        var command=new SubmitSpecialAuditCommand(1L,"US",OrderType.KEYWORD_COVERAGE,"keywords",null,null,List.of(new SubmitSpecialAuditCommand.AuditItem("US","keyword",null,null)),55L);
+        assertThatThrownBy(() -> service.submitCustomerAudit(10L,command)).isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+        module=new com.youou.aso.modules.pricing.domain.OrderModuleConfig(55L,"a","a","a","a","a","d","d","d","d","d",OrderType.KEYWORD_COVERAGE,null,null,true,1,List.of(StoreType.APP_STORE));
+        org.mockito.Mockito.when(modules.requireEnabled(55L,OrderType.KEYWORD_COVERAGE)).thenReturn(module);
+        org.mockito.Mockito.when(pricing.findModuleRegions(55L)).thenReturn(List.of("JP"));
+        assertThatThrownBy(() -> service.submitCustomerAudit(10L,command)).isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.STORE_REGION_NOT_SUPPORTED);
+        org.mockito.Mockito.when(pricing.findModuleRegions(55L)).thenReturn(List.of("US"));
+        assertThat(service.submitCustomerAudit(10L,command).getOrderModuleId()).isEqualTo(55L);
+        assertThatThrownBy(() -> service.submitCustomerAudit(10L,new SubmitSpecialAuditCommand(1L,"US",OrderType.KEYWORD_COVERAGE,"keywords",null,null,List.of(),55L))).isInstanceOf(BusinessException.class);
+    }
 
     @Test
     void submitCustomerAuditCreatesPendingReviewWithoutChargingWallet() {
@@ -82,6 +107,53 @@ class SpecialOrderAuditServiceTest {
         assertThat(audit.getRequestedContent()).isEqualTo("Keep keyword rank for brand terms");
         assertThat(audit.getNegotiatedPrice()).isNull();
         assertThat(walletService.balance).isEqualByComparingTo("100.00");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderType.class, names = {"RANK_GUARANTEE", "CHART_RANK_GUARANTEE", "KEYWORD_COVERAGE"})
+    void adminEditsSpecialDetailsAndAdjustsAmountAndDuration(OrderType type) {
+        for (OrderStatus status : List.of(OrderStatus.PENDING_CONFIRM, OrderStatus.PENDING_EXECUTION)) {
+            walletService.balance = new BigDecimal("100.00");
+            AsoOrder order = service.submitAdminSpecialOrder(10L, 7L, 1L, "US", type,
+                    List.of(pricedEditItem("US", "original", "2.00", 2)), null).order();
+            order.setStatus(status);
+            Long auditId = order.getSourceAuditId();
+            AsoOrder edited = service.editSubmittedOrder(order.getId(), 10L, 7L, 1L, type,
+                    List.of(pricedEditItem("JP", "changed", "3.00", 3), pricedEditItem("US", "second", "1.00", 1)));
+            assertThat(edited.getStatus()).isEqualTo(status);
+            assertThat(edited.getSourceAuditId()).isEqualTo(auditId);
+            assertThat(edited.getTotalAmount()).isEqualByComparingTo("10.00");
+            assertThat(walletService.balance).isEqualByComparingTo("90.00");
+            assertThat(edited.getTotalDays()).isEqualTo(3);
+            assertThat(edited.getExpectedCompletedAt()).isEqualTo(LocalDateTime.of(2026, 6, 23, 0, 0));
+            assertThat(auditItemRepository.findByAuditIds(List.of(auditId)).get(auditId))
+                    .extracting(SpecialOrderAuditItem::getKeyword).containsExactly("changed", "second");
+            assertThat(auditRepository.findById(auditId).orElseThrow().getNegotiatedPrice()).isEqualByComparingTo("10.00");
+            service.editSubmittedOrder(order.getId(), 10L, 7L, 1L, type, List.of(pricedEditItem("US", "final", "1.00", 1)));
+            assertThat(walletService.balance).isEqualByComparingTo("99.00");
+            assertThat(edited.getStatus()).isEqualTo(status);
+            assertThat(edited.getRegionCode()).isEqualTo("US");
+        }
+    }
+
+    @Test
+    void specialEditInsufficientBalanceAndInvalidStateDoNotChangeDetails() {
+        walletService.balance = new BigDecimal("4.00");
+        AsoOrder order = service.submitAdminSpecialOrder(10L, 7L, 1L, "US", OrderType.KEYWORD_COVERAGE,
+                List.of(pricedEditItem("US", "original", "2.00", 2)), null).order();
+        assertThatThrownBy(() -> service.editSubmittedOrder(order.getId(), 10L, 7L, 1L, order.getOrderType(),
+                List.of(pricedEditItem("US", "changed", "3.00", 3))))
+                .isInstanceOf(BusinessException.class).hasMessage(ErrorCode.BALANCE_NOT_ENOUGH.name());
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("4.00");
+        assertThat(auditItemRepository.findByAuditIds(List.of(order.getSourceAuditId())).get(order.getSourceAuditId()).get(0).getKeyword()).isEqualTo("original");
+        order.setStatus(OrderStatus.EXECUTING);
+        assertThatThrownBy(() -> service.editSubmittedOrder(order.getId(), 10L, 7L, 1L, order.getOrderType(),
+                List.of(pricedEditItem("US", "changed", "1.00", 1))))
+                .isInstanceOf(BusinessException.class).hasMessage(ErrorCode.ORDER_STATUS_INVALID.name());
+    }
+
+    private SubmitSpecialAuditCommand.AuditItem pricedEditItem(String region, String keyword, String price, int days) {
+        return new SubmitSpecialAuditCommand.AuditItem(region, keyword, keyword, 5, null, new BigDecimal(price), days);
     }
 
     @Test
@@ -169,6 +241,304 @@ class SpecialOrderAuditServiceTest {
     }
 
     @Test
+    void customerCoverageAuditStillAcceptsUnpricedKeywordsWithoutRankingOrCharging() {
+        walletService.balance = new BigDecimal("100.00");
+
+        SpecialOrderAudit audit = unpricedCoverageAudit();
+
+        assertThat(audit.getStatus()).isEqualTo(SpecialAuditStatus.PENDING_REVIEW);
+        assertThat(audit.getNegotiatedPrice()).isNull();
+        assertThat(audit.getItems()).hasSize(2).allSatisfy(item -> {
+            assertThat(item.getTargetRank()).isNull();
+            assertThat(item.getUnitPrice()).isNull();
+            assertThat(item.getExecutionDays()).isNull();
+        });
+        assertThat(walletService.balance).isEqualByComparingTo("100.00");
+        assertThat(orderRepository.saved).isEmpty();
+    }
+
+    @Test
+    void adminCoverageOrderUsesItemPricingForSavedAuditOrderAndWalletInsteadOfClientTotal() {
+        walletService.balance = new BigDecimal("100.00");
+
+        SpecialOrderAuditService.AdminSpecialOrderSubmission result = service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", OrderType.KEYWORD_COVERAGE,
+                List.of(
+                        new SubmitSpecialAuditCommand.AuditItem("US", "chat app", null, null, null, new BigDecimal("1.25"), 10),
+                        new SubmitSpecialAuditCommand.AuditItem("JP", "assistant", null, 99, null, new BigDecimal("2.10"), 5)),
+                new BigDecimal("0.01"));
+
+        assertThat(result.paid()).isTrue();
+        assertThat(result.audit().getNegotiatedPrice()).isEqualByComparingTo("23.00");
+        assertThat(result.audit().getItems())
+                .extracting(SpecialOrderAuditItem::getRegionCode, SpecialOrderAuditItem::getKeyword,
+                        SpecialOrderAuditItem::getTargetRank, SpecialOrderAuditItem::getUnitPrice,
+                        SpecialOrderAuditItem::getExecutionDays)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("US", "chat app", null, new BigDecimal("1.25"), 10),
+                        org.assertj.core.groups.Tuple.tuple("JP", "assistant", null, new BigDecimal("2.10"), 5));
+        assertThat(auditItemRepository.itemsByAuditId.get(result.audit().getId())).hasSize(2);
+        assertThat(result.order().getOrderType()).isEqualTo(OrderType.KEYWORD_COVERAGE);
+        assertThat(result.order().getStatus()).isEqualTo(OrderStatus.PENDING_EXECUTION);
+        assertThat(result.order().getTotalAmount()).isEqualByComparingTo("23.00");
+        assertThat(result.order().getBalanceAfter()).isEqualByComparingTo("77.00");
+        assertThat(orderItemRepository.itemsByOrderId.get(result.order().getId()))
+                .singleElement().satisfies(item -> assertThat(item.getAmount()).isEqualByComparingTo("23.00"));
+        assertThat(walletService.balance).isEqualByComparingTo("77.00");
+    }
+
+    @Test
+    void adminCoverageOrderKeepsCalculatedQuoteWhenBalanceIsInsufficient() {
+        walletService.balance = new BigDecimal("10.00");
+
+        SpecialOrderAuditService.AdminSpecialOrderSubmission result = service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", OrderType.KEYWORD_COVERAGE,
+                List.of(coverageItem(new BigDecimal("2.50"), 5)), new BigDecimal("0.01"));
+
+        assertThat(result.paid()).isFalse();
+        assertThat(result.order()).isNull();
+        assertThat(result.audit().getStatus()).isEqualTo(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
+        assertThat(result.audit().getNegotiatedPrice()).isEqualByComparingTo("12.50");
+        assertThat(result.audit().getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getUnitPrice()).isEqualByComparingTo("2.50");
+            assertThat(item.getExecutionDays()).isEqualTo(5);
+        });
+        assertThat(orderRepository.saved).isEmpty();
+        assertThat(walletService.balance).isEqualByComparingTo("10.00");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidItemPricing")
+    void adminCoverageOrderRejectsMissingOrInvalidItemPriceAndDays(BigDecimal unitPrice, Integer executionDays) {
+        walletService.balance = new BigDecimal("100.00");
+
+        assertThatThrownBy(() -> service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", OrderType.KEYWORD_COVERAGE,
+                List.of(coverageItem(unitPrice, executionDays)), new BigDecimal("88.00")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+
+        assertThat(auditRepository.findAll()).isEmpty();
+        assertThat(orderRepository.saved).isEmpty();
+        assertThat(walletService.balance).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void adminCoverageOrderRequiresKeywordItemsEvenWhenClientProvidesGlobalPrice() {
+        assertThatThrownBy(() -> service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", OrderType.KEYWORD_COVERAGE, List.of(), new BigDecimal("88.00")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
+        assertThat(auditRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    void coverageReviewPersistsPerKeywordPricingAndChargesCalculatedTotalOnSubmission() {
+        walletService.balance = new BigDecimal("100.00");
+        SpecialOrderAudit audit = unpricedCoverageAudit();
+
+        SpecialOrderAudit approved = service.reviewAudit(audit.getId(), 7L, new ReviewSpecialAuditCommand(
+                "Coverage approved", new BigDecimal("0.01"), List.of(
+                new ReviewSpecialAuditCommand.ItemPricing(2L, new BigDecimal("2.10"), 5),
+                new ReviewSpecialAuditCommand.ItemPricing(1L, new BigDecimal("1.25"), 10))));
+
+        assertThat(approved.getStatus()).isEqualTo(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
+        assertThat(approved.getNegotiatedPrice()).isEqualByComparingTo("23.00");
+        assertThat(approved.getItems()).allSatisfy(item -> assertThat(item.getTargetRank()).isNull());
+        assertThat(approved.getItems())
+                .extracting(SpecialOrderAuditItem::getUnitPrice, SpecialOrderAuditItem::getExecutionDays)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(new BigDecimal("1.25"), 10),
+                        org.assertj.core.groups.Tuple.tuple(new BigDecimal("2.10"), 5));
+        assertThat(walletService.balance).isEqualByComparingTo("100.00");
+
+        AsoOrder order = service.submitApprovedAudit(10L, audit.getId());
+
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("23.00");
+        assertThat(order.getItems()).singleElement()
+                .satisfies(item -> assertThat(item.getAmount()).isEqualByComparingTo("23.00"));
+        assertThat(walletService.balance).isEqualByComparingTo("77.00");
+    }
+
+    @ParameterizedTest
+    @MethodSource("incompleteReviewPricing")
+    void coverageReviewRequiresPricesForExactlyItsOwnKeywords(
+            List<ReviewSpecialAuditCommand.ItemPricing> pricing, ErrorCode expectedError) {
+        SpecialOrderAudit audit = unpricedCoverageAudit();
+
+        assertThatThrownBy(() -> service.reviewAudit(audit.getId(), 7L,
+                new ReviewSpecialAuditCommand("Approved", new BigDecimal("88.00"), pricing)))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(expectedError);
+
+        assertThat(audit.getStatus()).isEqualTo(SpecialAuditStatus.PENDING_REVIEW);
+        assertThat(audit.getNegotiatedPrice()).isNull();
+        assertThat(auditItemRepository.itemsByAuditId.get(audit.getId()))
+                .allSatisfy(item -> assertThat(item.getUnitPrice()).isNull());
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidItemPricing")
+    void coverageReviewValidatesEveryPriceBeforeUpdatingAnyKeyword(BigDecimal unitPrice, Integer executionDays) {
+        SpecialOrderAudit audit = unpricedCoverageAudit();
+
+        assertThatThrownBy(() -> service.reviewAudit(audit.getId(), 7L,
+                new ReviewSpecialAuditCommand("Approved", new BigDecimal("88.00"), List.of(
+                        new ReviewSpecialAuditCommand.ItemPricing(1L, new BigDecimal("1.25"), 10),
+                        new ReviewSpecialAuditCommand.ItemPricing(2L, unitPrice, executionDays)))))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.SPECIAL_AUDIT_PRICE_INVALID);
+
+        assertThat(audit.getStatus()).isEqualTo(SpecialAuditStatus.PENDING_REVIEW);
+        assertThat(auditItemRepository.itemsByAuditId.get(audit.getId())).allSatisfy(item -> {
+            assertThat(item.getUnitPrice()).isNull();
+            assertThat(item.getExecutionDays()).isNull();
+        });
+    }
+
+    @Test
+    void legacyCoverageAuditWithoutItemsStillAcceptsOverallQuote() {
+        SpecialOrderAudit audit = pendingAudit();
+        audit.setOrderType(OrderType.KEYWORD_COVERAGE);
+        auditRepository.save(audit);
+
+        SpecialOrderAudit approved = service.reviewAudit(audit.getId(), 7L,
+                new ReviewSpecialAuditCommand("Legacy coverage package", new BigDecimal("88.00")));
+
+        assertThat(approved.getStatus()).isEqualTo(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
+        assertThat(approved.getNegotiatedPrice()).isEqualByComparingTo("88.00");
+    }
+
+    @Test
+    void previouslyApprovedCoveragePackageWithUnpricedKeywordsRetainsItsAgreedPrice() {
+        walletService.balance = new BigDecimal("100.00");
+        SpecialOrderAudit audit = unpricedCoverageAudit();
+        audit.setStatus(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
+        audit.setNegotiatedPrice(new BigDecimal("88.00"));
+
+        AsoOrder order = service.submitApprovedAudit(10L, audit.getId());
+
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("88.00");
+        assertThat(order.getItems()).hasSize(1);
+        assertThat(order.getTotalDays()).isEqualTo(1);
+        assertThat(order.getOrderEndDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getExpectedCompletedAt()).isEqualTo(LocalDate.of(2026, 6, 21).atStartOfDay());
+        assertThat(walletService.balance).isEqualByComparingTo("12.00");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderType.class, names = {"RANK_GUARANTEE", "CHART_RANK_GUARANTEE", "KEYWORD_COVERAGE"})
+    void customerSubmissionUsesLongestPersistedReviewedItemDuration(OrderType orderType) {
+        walletService.balance = new BigDecimal("100.00");
+        SpecialOrderAudit audit = service.submitCustomerAudit(10L, new SubmitSpecialAuditCommand(
+                1L, "US", orderType, "Keep the requested service running", List.of(
+                new SubmitSpecialAuditCommand.AuditItem("US", "chat app", "Top Free", 3, null),
+                new SubmitSpecialAuditCommand.AuditItem("JP", "assistant", "Top Paid", 5, null))));
+        service.reviewAudit(audit.getId(), 7L, new ReviewSpecialAuditCommand(
+                "Approved service", null, List.of(
+                new ReviewSpecialAuditCommand.ItemPricing(1L, new BigDecimal("2.00"), 5),
+                new ReviewSpecialAuditCommand.ItemPricing(2L, new BigDecimal("1.00"), 10))));
+        // A fresh repository read does not hydrate the audit's transient item list.
+        audit.setItems(List.of());
+
+        AsoOrder order = service.submitApprovedAudit(10L, audit.getId());
+
+        assertThat(order.getOrderStartDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getOrderEndDate()).isEqualTo(LocalDate.of(2026, 6, 29));
+        assertThat(order.getTotalDays()).isEqualTo(10);
+        assertThat(order.getExpectedCompletedAt()).isEqualTo(LocalDate.of(2026, 6, 30).atStartOfDay());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_CONFIRM);
+        assertThat(order.getQuantity()).isEqualTo(1);
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("20.00");
+        assertThat(order.getItems()).singleElement().satisfies(item -> {
+            assertThat(item.getQuantity()).isEqualTo(1);
+            assertThat(item.getAmount()).isEqualByComparingTo("20.00");
+        });
+        assertThat(walletService.balance).isEqualByComparingTo("80.00");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderType.class, names = {"RANK_GUARANTEE", "CHART_RANK_GUARANTEE", "KEYWORD_COVERAGE"})
+    void adminDirectSubmissionUsesLongestItemDuration(OrderType orderType) {
+        walletService.balance = new BigDecimal("100.00");
+
+        SpecialOrderAuditService.AdminSpecialOrderSubmission result = service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", orderType, List.of(
+                new SubmitSpecialAuditCommand.AuditItem("US", "chat app", "Top Free", 3,
+                        null, new BigDecimal("2.00"), 7),
+                new SubmitSpecialAuditCommand.AuditItem("JP", "assistant", "Top Paid", 5,
+                        null, new BigDecimal("1.00"), 3)), null);
+
+        assertThat(result.paid()).isTrue();
+        AsoOrder order = result.order();
+        assertThat(order.getOrderStartDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getOrderEndDate()).isEqualTo(LocalDate.of(2026, 6, 26));
+        assertThat(order.getTotalDays()).isEqualTo(7);
+        assertThat(order.getExpectedCompletedAt()).isEqualTo(LocalDate.of(2026, 6, 27).atStartOfDay());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_EXECUTION);
+        assertThat(order.getQuantity()).isEqualTo(1);
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("17.00");
+        assertThat(walletService.balance).isEqualByComparingTo("83.00");
+    }
+
+    @Test
+    void singleDaySpecialOrderStillCompletesAfterItsStartDate() {
+        walletService.balance = new BigDecimal("100.00");
+
+        AsoOrder order = service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", OrderType.KEYWORD_COVERAGE,
+                List.of(coverageItem(new BigDecimal("2.50"), 1)), null).order();
+
+        assertThat(order.getOrderStartDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getOrderEndDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getTotalDays()).isEqualTo(1);
+        assertThat(order.getExpectedCompletedAt()).isEqualTo(LocalDate.of(2026, 6, 21).atStartOfDay());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OrderType.class, names = {"RANK_GUARANTEE", "CHART_RANK_GUARANTEE"})
+    void rankedOrdersStillRequireTargetRankWhenItemPricesAreValid(OrderType orderType) {
+        assertThatThrownBy(() -> service.submitAdminSpecialOrder(
+                10L, 7L, 1L, "US", orderType,
+                List.of(new SubmitSpecialAuditCommand.AuditItem("US", "chat app", "Top Free", null,
+                        null, new BigDecimal("1.25"), 10)), new BigDecimal("88.00")))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.BAD_REQUEST);
+    }
+
+    private SpecialOrderAudit unpricedCoverageAudit() {
+        return service.submitCustomerAudit(10L, new SubmitSpecialAuditCommand(
+                1L, "US", OrderType.KEYWORD_COVERAGE, "Expand keyword coverage", List.of(
+                new SubmitSpecialAuditCommand.AuditItem("US", "chat app", null, null),
+                new SubmitSpecialAuditCommand.AuditItem("JP", "assistant", null, null))));
+    }
+
+    private static SubmitSpecialAuditCommand.AuditItem coverageItem(BigDecimal unitPrice, Integer executionDays) {
+        return new SubmitSpecialAuditCommand.AuditItem("US", "chat app", null, null, null, unitPrice, executionDays);
+    }
+
+    private static Stream<Arguments> invalidItemPricing() {
+        return Stream.of(
+                Arguments.of(null, null),
+                Arguments.of(null, 5),
+                Arguments.of(new BigDecimal("1.25"), null),
+                Arguments.of(BigDecimal.ZERO, 5),
+                Arguments.of(new BigDecimal("-1.00"), 5),
+                Arguments.of(new BigDecimal("1.255"), 5),
+                Arguments.of(new BigDecimal("1.25"), 0),
+                Arguments.of(new BigDecimal("1.25"), -1),
+                Arguments.of(new BigDecimal("1.25"), 3651));
+    }
+
+    private static Stream<Arguments> incompleteReviewPricing() {
+        ReviewSpecialAuditCommand.ItemPricing first = new ReviewSpecialAuditCommand.ItemPricing(1L, new BigDecimal("1.25"), 10);
+        return Stream.of(
+                Arguments.of(null, ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED),
+                Arguments.of(List.of(first), ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED),
+                Arguments.of(List.of(first, first), ErrorCode.SPECIAL_AUDIT_PRICE_INVALID),
+                Arguments.of(List.of(first, new ReviewSpecialAuditCommand.ItemPricing(99L, new BigDecimal("2.00"), 5)),
+                        ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED));
+    }
+
+    @Test
     void submitApprovedAuditCreatesFormalOrderAndDeductsBalance() {
         walletService.balance = new BigDecimal("100.00");
         SpecialOrderAudit audit = approvedAudit();
@@ -184,6 +554,8 @@ class SpecialOrderAuditServiceTest {
         assertThat(order.getBalanceBefore()).isEqualByComparingTo("100.00");
         assertThat(order.getBalanceAfter()).isEqualByComparingTo("12.00");
         assertThat(order.getOrderStartDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getOrderEndDate()).isEqualTo(LocalDate.of(2026, 6, 20));
+        assertThat(order.getTotalDays()).isEqualTo(1);
         assertThat(order.getExpectedCompletedAt()).isEqualTo(LocalDate.of(2026, 6, 21).atStartOfDay());
         assertThat(order.getItems())
                 .extracting(OrderItem::getItemType, OrderItem::getItemName, OrderItem::getQuantity, OrderItem::getAmount)
@@ -376,6 +748,11 @@ class SpecialOrderAuditServiceTest {
 
     private static final class FakeSpecialOrderAuditItemRepository implements SpecialOrderAuditItemRepository {
         private final Map<Long, List<SpecialOrderAuditItem>> itemsByAuditId = new java.util.HashMap<>();
+
+        @Override
+        public void deleteByAuditId(Long auditId) {
+            itemsByAuditId.remove(auditId);
+        }
 
         @Override
         public void saveAll(Long auditId, List<SpecialOrderAuditItem> items) {

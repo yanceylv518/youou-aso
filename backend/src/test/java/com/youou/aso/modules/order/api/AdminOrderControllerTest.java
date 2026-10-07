@@ -32,6 +32,50 @@ class AdminOrderControllerTest {
     private final AdminOrderController controller = new AdminOrderController(orderService, specialOrderAuditService);
 
     @Test
+    void completedAdjustmentUsesCompletedQuantityAndRejectsCustomer() {
+        var edits = List.of(new OrderService.CompletedItemEdit(5L, 3));
+        when(orderService.adjustCompletedOrder(99L, 1L, edits, "App removed from store")).thenReturn(sampleOrder());
+        controller.adjustCompletedItems(new AuthenticatedAccount(1L, AccountType.ADMIN.name(), "ADMIN"), 99L,
+                new AdminOrderController.AdjustCompletedOrderRequest(List.of(
+                        new AdminOrderController.PausedItemEditRequest(5L, 12, 3)), "App removed from store"));
+        verify(orderService).adjustCompletedOrder(99L, 1L, edits, "App removed from store");
+        assertThatThrownBy(() -> controller.adjustCompletedItems(
+                new AuthenticatedAccount(20L, AccountType.CUSTOMER.name(), "CUSTOMER"), 99L, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void closePausedOrderUsesFinalQuantityAsCompletedQuantity() {
+        var edits = List.of(new OrderService.PausedItemEdit(5L, 12, 12));
+        when(orderService.closePausedOrder(99L, 1L, edits)).thenReturn(sampleOrder());
+        controller.closePausedOrder(new AuthenticatedAccount(1L, AccountType.ADMIN.name(), "ADMIN"), 99L,
+                new AdminOrderController.UpdatePausedOrderRequest(List.of(
+                        new AdminOrderController.PausedItemEditRequest(5L, 12, 3))));
+        verify(orderService).closePausedOrder(99L, 1L, edits);
+        assertThatThrownBy(() -> controller.closePausedOrder(
+                new AuthenticatedAccount(20L, AccountType.CUSTOMER.name(), "CUSTOMER"), 99L, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void administratorEditDelegatesWithAuthenticatedAdminAndCustomer() {
+        var request = new AdminOrderController.AdminCreateOrderRequest(20L, 30L, OrderType.DOWNLOAD,
+                LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 21), null, List.of(), null, 100, null, null, null, null);
+        when(orderService.editAdminOrder(org.mockito.ArgumentMatchers.eq(20L), org.mockito.ArgumentMatchers.eq(99L),
+                org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any())).thenReturn(sampleOrder());
+        controller.edit(new AuthenticatedAccount(1L, AccountType.ADMIN.name(), "ADMIN"), 99L, request);
+        verify(orderService).editAdminOrder(org.mockito.ArgumentMatchers.eq(20L), org.mockito.ArgumentMatchers.eq(99L),
+                org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void customerCannotUseAdministratorEditEndpoint() {
+        assertThatThrownBy(() -> controller.edit(new AuthenticatedAccount(20L, AccountType.CUSTOMER.name(), "CUSTOMER"), 99L, null))
+                .isInstanceOf(BusinessException.class);
+        org.mockito.Mockito.verifyNoInteractions(orderService, specialOrderAuditService);
+    }
+
+    @Test
     void adminCanCreateOrderForCustomer() {
         AsoOrder created = sampleOrder();
         when(orderService.createAdminOrderForCustomer(
@@ -107,7 +151,7 @@ class AdminOrderControllerTest {
                 List.of(),
                 "Telegram",
                 "@youou",
-                new BigDecimal("99.00")
+                new BigDecimal("99.00"), null
         )).thenReturn(new SpecialOrderAuditService.AdminSpecialOrderSubmission(null, audit, false));
 
         AdminCreateOrderResult result = controller.createForCustomer(

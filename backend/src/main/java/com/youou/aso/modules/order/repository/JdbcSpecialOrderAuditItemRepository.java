@@ -34,6 +34,11 @@ public class JdbcSpecialOrderAuditItemRepository implements SpecialOrderAuditIte
     }
 
     @Override
+    public void deleteByAuditId(Long auditId) {
+        jdbcTemplate.update("DELETE FROM special_order_audit_item WHERE audit_id = ?", auditId);
+    }
+
+    @Override
     public void saveAll(Long auditId, List<SpecialOrderAuditItem> items) {
         if (auditId == null || items == null || items.isEmpty()) {
             return;

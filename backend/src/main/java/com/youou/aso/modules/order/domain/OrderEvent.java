@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public class OrderEvent {
+    private String reason;
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
     private Long id;
     private Long orderId;
     private String eventType;

@@ -243,7 +243,7 @@ p {
 h1 {
   margin: 0;
   color: #132033;
-  font-size: 58px;
+  font-size: clamp(32px, 3.2vw, 48px);
   font-weight: 900;
   line-height: 1.15;
 }
@@ -728,4 +728,9 @@ h1 span {
     height: 58px;
   }
 }
+h1 { text-wrap:balance; overflow-wrap:normal; }
+h1 span { display:inline-block; }
+.service-text { min-width:0; }
+.service-text strong { font-size:clamp(14px,1.1vw,17px); text-wrap:balance; word-break:normal; overflow-wrap:normal; }
+:lang(zh-CN) .service-text strong { white-space:nowrap; }
 </style>

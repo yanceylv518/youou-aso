@@ -214,6 +214,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCurrency } from '@/utils/presentation'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
@@ -450,13 +451,7 @@ function localizeContactHint(value: string | null | undefined) {
   return value
 }
 
-function formatMoney(value: string | number | undefined | null) {
-  if (value === undefined || value === null || value === '') return '$--'
-  return `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  })}`
-}
+const formatMoney = formatCurrency
 
 async function handleAccountCommand(command: string | number | object) {
   if (command === 'settings') {
@@ -1125,5 +1120,17 @@ async function logout() {
     padding: 16px 12px;
   }
 }
+
+@media(max-width:700px) {
+ .topbar { display:grid; grid-template-columns:minmax(0,1fr); gap:0; padding:8px 12px; }
+ .topbar-actions { flex-wrap:nowrap; gap:6px; }
+ .wallet-pill { width:auto; order:0; flex:1; padding:0; justify-content:flex-start; gap:6px; }
+ .wallet-refresh, .wallet-label { display:none; }
+ .language-trigger { min-width:40px; padding:4px 6px; }
+ .account-trigger { padding:4px 6px; }
+ .wallet-recharge { min-width:54px; height:30px; min-height:30px; padding:4px 10px; }
+ .account-avatar { width:24px; height:24px; }
+}
+
 </style>
 

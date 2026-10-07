@@ -92,4 +92,22 @@ public class JdbcPricingConfigRepository implements PricingConfigRepository {
         regionPrices.forEach((regionCode, price) -> jdbcTemplate.update(
                 "INSERT INTO pricing_region_override (price_code, region_code, unit_price) VALUES (?, ?, ?)", code.name(), regionCode, price));
     }
+
+    public List<String> findModuleRegions(Long moduleId) {
+        return jdbcTemplate.queryForList("SELECT region_code FROM order_module_region_config WHERE module_id=? ORDER BY region_code", String.class, moduleId);
+    }
+    public Map<String, BigDecimal> findModulePrices(Long moduleId, PriceCode code) {
+        Map<String, BigDecimal> prices = new LinkedHashMap<>();
+        jdbcTemplate.query("SELECT region_code,unit_price FROM order_module_region_price WHERE module_id=? AND price_code=?",
+            rs -> { prices.put(rs.getString("region_code"),rs.getBigDecimal("unit_price")); }, moduleId,code.name());
+        return prices;
+    }
+    public void replaceModuleRegions(Long moduleId, List<String> regions) {
+        jdbcTemplate.update("DELETE FROM order_module_region_config WHERE module_id=?",moduleId);
+        regions.forEach(region -> jdbcTemplate.update("INSERT INTO order_module_region_config(module_id,region_code) VALUES(?,?)",moduleId,region));
+    }
+    public void replaceModulePrices(Long moduleId, PriceCode code, Map<String, BigDecimal> prices) {
+        jdbcTemplate.update("DELETE FROM order_module_region_price WHERE module_id=? AND price_code=?",moduleId,code.name());
+        prices.forEach((region,price) -> jdbcTemplate.update("INSERT INTO order_module_region_price(module_id,price_code,region_code,unit_price) VALUES(?,?,?,?)",moduleId,code.name(),region,price));
+    }
 }

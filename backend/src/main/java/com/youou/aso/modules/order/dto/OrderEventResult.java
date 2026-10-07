@@ -15,7 +15,8 @@ public record OrderEventResult(
         BigDecimal amountBefore,
         BigDecimal amountAfter,
         Long createdByAdminId,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String reason
 ) {
     public static OrderEventResult from(OrderEvent event) {
         return new OrderEventResult(
@@ -28,7 +29,8 @@ public record OrderEventResult(
                 event.getAmountBefore(),
                 event.getAmountAfter(),
                 event.getCreatedByAdminId(),
-                event.getCreatedAt()
+                event.getCreatedAt(),
+                event.getReason()
         );
     }
 }

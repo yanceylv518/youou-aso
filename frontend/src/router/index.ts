@@ -43,6 +43,7 @@ const router = createRouter({
         { path: 'customers', name: 'admin-customers', component: () => import('@/views/admin/CustomerManagementView.vue'), meta: { titleKey: 'menu.customers', menuCode: 'customers' } },
         { path: 'promotion', name: 'admin-promotion', component: () => import('@/views/admin/DynamicPromotionView.vue'), meta: { titleKey: 'menu.promotion', menuCode: 'promotion' } },
         { path: 'orders/create', name: 'admin-order-create', component: () => import('@/views/admin/OrderCreateView.vue'), meta: { titleKey: 'orderCreate.adminTitle', activeMenu: '/admin/promotion', menuCode: 'promotion' } },
+        { path: 'orders/edit', name: 'admin-order-edit', component: () => import('@/views/admin/OrderCreateView.vue'), meta: { titleKey: 'ordersPage.editOrder', activeMenu: '/admin/orders/apple', menuCode: 'orders' } },
         { path: 'orders/:id', name: 'admin-order-detail', component: () => import('@/views/admin/OrderDetailView.vue'), meta: { titleKey: 'orderDetail.title', topTitleKey: 'menu.orders', menuCode: 'orders' } },
         { path: 'special-order-audits/:id', name: 'admin-special-order-audit-detail', component: () => import('@/views/user/SpecialOrderAuditDetailView.vue'), meta: { titleKey: 'orderDetail.title', topTitleKey: 'menu.orderExecution', menuCode: 'orders.pendingReview' } },
         { path: 'applications', name: 'admin-applications', component: () => import('@/views/admin/ApplicationManagementView.vue'), meta: { titleKey: 'menu.applications', menuCode: 'applications' } },

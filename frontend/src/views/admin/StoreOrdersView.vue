@@ -1,6 +1,7 @@
 <template>
   <section class="orders-page">
-    <div class="query-panel">
+    <div class="query-panel" :class="{ 'filters-expanded': filtersExpanded }">
+      <el-button class="mobile-filter-toggle" :aria-expanded="filtersExpanded" @click="filtersExpanded = !filtersExpanded">{{ t(filtersExpanded ? 'visual.collapse' : 'visual.filters') }} · {{ t('visual.filterCount', { count: activeFilterCount }) }}</el-button>
       <div class="query-grid">
         <label class="query-item keyword-item">
           <span>{{ t('ordersPage.contentFilter') }}</span>
@@ -129,12 +130,15 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column v-if="showBatchActions" type="selection" width="48" :selectable="isSelectableOrderRow" />
-        <el-table-column v-if="isColumnVisible('orderNo')" prop="orderNo" :label="t('ordersPage.orderNo')" min-width="210">
+        <el-table-column v-if="isMobile" :label="t('ordersPage.orderNo')" min-width="180">
+          <template #default="{row}"><div class="mobile-order-summary"><strong>{{row.appName}}</strong><span>{{row.orderNo}}</span><span>{{orderDateText(row)}}</span><el-tag class="order-status-tag" :type="statusTagType(row.status)">{{statusLabel(row.status)}}</el-tag><ReservedOrderTag :order="row" /></div></template>
+        </el-table-column>
+        <el-table-column v-if="!isMobile && isColumnVisible('orderNo')" prop="orderNo" :label="t('ordersPage.orderNo')" min-width="210">
           <template #default="{ row }">
             <span class="order-no">{{ row.orderNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('customer')" :label="t('ordersPage.customer')" min-width="180">
+        <el-table-column v-if="!isMobile && isColumnVisible('customer')" :label="t('ordersPage.customer')" min-width="180">
           <template #default="{ row }">
             <div class="customer-cell">
               <strong>{{ orderCustomerName(row) }}</strong>
@@ -142,7 +146,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('app')" :label="t('ordersPage.app')" min-width="220">
+        <el-table-column v-if="!isMobile && isColumnVisible('app')" :label="t('ordersPage.app')" min-width="220">
           <template #default="{ row }">
             <div class="app-cell">
               <div class="app-icon">
@@ -158,89 +162,93 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('appIdentifier')" prop="appIdentifier" :label="t('ordersPage.appIdentifier')" min-width="190" />
-        <el-table-column v-if="isColumnVisible('store')" :label="t('ordersPage.store')" min-width="120">
+        <el-table-column v-if="!isMobile && isColumnVisible('appIdentifier')" prop="appIdentifier" :label="t('ordersPage.appIdentifier')" min-width="190" />
+        <el-table-column v-if="!isMobile && isColumnVisible('store')" :label="t('ordersPage.store')" min-width="120">
           <template #default="{ row }">{{ storeLabel(row.storeType) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('region')" prop="regionCode" :label="t('ordersPage.region')" min-width="100" />
-        <el-table-column v-if="isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="190">
-          <template #default="{ row }">{{ orderDateText(row) }}</template>
+        <el-table-column v-if="!isMobile && isColumnVisible('region')" prop="regionCode" :label="t('ordersPage.region')" min-width="100" />
+        <el-table-column v-if="!isMobile && isColumnVisible('orderTime')" :label="t('ordersPage.orderTime')" min-width="190">
+          <template #default="{ row }"><span class="order-schedule">{{ orderDateText(row) }}</span></template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('totalDays')" :label="t('orderDetail.totalDays')" min-width="90" align="right">
           <template #default="{ row }">{{ valueOrDash(row.totalDays) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('executionHours')" :label="t('orderDetail.executionHours')" min-width="120" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('executionHours')" :label="t('orderDetail.executionHours')" min-width="120" align="right">
           <template #default="{ row }">{{ valueOrDash(row.executionHours) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('quantity')" :label="t('ordersPage.quantity')" min-width="100" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('quantity')" :label="t('ordersPage.quantity')" min-width="100" align="right">
           <template #default="{ row }">{{ valueOrDash(row.quantity) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
-          <template #default="{ row }">{{ money(row.unitPrice) }}</template>
+        <el-table-column v-if="!isMobile && isColumnVisible('unitPrice')" :label="t('ordersPage.unitPrice')" min-width="120" align="right">
+          <template #default="{ row }">{{ formatCurrency(row.unitPrice, 4) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('amount')" :label="t('ordersPage.amount')" min-width="120" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('amount')" :label="t('ordersPage.amount')" min-width="120" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
+        <el-table-column v-if="!isMobile && isColumnVisible('refundAmount')" :label="t('ordersPage.refundAmount')" min-width="120" align="right">
           <template #default="{ row }">{{ money(row.refundAmount) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('taskType')" :label="t('ordersPage.taskType')" min-width="150">
+        <el-table-column v-if="!isMobile && isColumnVisible('taskType')" :label="t('ordersPage.taskType')" min-width="150">
           <template #default="{ row }">{{ orderTypeLabel(row) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('orderCategory')" :label="t('ordersPage.orderCategory')" min-width="130">
+        <el-table-column v-if="!isMobile && isColumnVisible('orderCategory')" :label="t('ordersPage.orderCategory')" min-width="130">
           <template #default="{ row }">{{ isAuditRow(row) || row.sourceAuditId ? t('ordersPage.categories.SPECIAL') : t('ordersPage.categories.REGULAR') }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('status')" :label="t('ordersPage.status')" min-width="130" align="center">
+        <el-table-column v-if="!isMobile && isColumnVisible('status')" :label="t('ordersPage.status')" min-width="130" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
+            <div class="order-status-tags">
+              <el-tag class="order-status-tag" :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
+              <ReservedOrderTag :order="row" />
+            </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('expectedCompletedAt')" :label="t('ordersPage.expectedCompletedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.expectedCompletedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('confirmedAt')" :label="t('orderDetail.confirmedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('confirmedAt')" :label="t('orderDetail.confirmedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.confirmedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('executedAt')" :label="t('orderDetail.executedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('executedAt')" :label="t('orderDetail.executedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.executedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('completedAt')" :label="t('orderDetail.completedAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('completedAt')" :label="t('orderDetail.completedAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.completedAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="170">
+        <el-table-column v-if="!isMobile && isColumnVisible('createdAt')" :label="t('ordersPage.createdAt')" min-width="170">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column v-if="isColumnVisible('actions')" :label="t('ordersPage.actions')" width="220" fixed="right" align="center">
+        <el-table-column v-if="isMobile || isColumnVisible('actions')" :label="t('ordersPage.actions')" :width="isMobile ? 130 : 220" :fixed="isMobile ? false : 'right'" align="center">
           <template #default="{ row }">
-            <div class="row-actions">
-              <el-button class="action-detail" size="small" text type="primary" :icon="View" @click="viewDetail(row)">
+            <div class="order-row-actions">
+<el-button class="action-detail" size="small" text type="primary" :icon="View" @click="viewDetail(row)">
                 {{ t('ordersPage.actionDetail') }}
               </el-button>
-              <el-button v-if="row.status === 'PENDING_CONFIRM'" size="small" :icon="Check" @click="confirmOrder(row)">
+<el-button v-if="['PAUSED', 'COMPLETED'].includes(row.status)" size="small" :icon="Edit" @click="openPausedEdit(row)">
+                {{ row.status === 'COMPLETED' ? t('ordersPage.editCompletedTitle') : t('ordersPage.actionEditProgress') }}
+              </el-button>
+<el-dropdown v-if="(['PENDING_CONFIRM', 'PENDING_EXECUTION'].includes(row.status) && editAuth.hasPermission('order:create')) || (row.status === 'PENDING_CONFIRM') || (showBatchExecute && row.status === 'PENDING_EXECUTION') || (row.status === 'EXECUTING') || (row.status === 'PAUSED') || (isAuditRow(row) && row.status === 'PENDING_REVIEW') || (canRenewOrder(row)) || (canCancel(row))" trigger="click"><el-button size="small" :icon="MoreFilled">{{ t('ordersPage.actionMore') }}</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item :icon="Edit" v-if="['PENDING_CONFIRM', 'PENDING_EXECUTION'].includes(row.status) && editAuth.hasPermission('order:create')" @click="router.push({ name: 'admin-order-edit', query: { orderId: String(row.id) } })">{{ t('ordersPage.editOrder') }}</el-dropdown-item>
+<el-dropdown-item v-if="row.status === 'PENDING_CONFIRM'" :icon="Check" @click="confirmOrder(row)">
                 {{ t('ordersPage.actionConfirm') }}
-              </el-button>
-              <el-button v-if="showBatchExecute && row.status === 'PENDING_EXECUTION'" size="small" :icon="VideoPlay" @click="executeOrder(row)">
+              </el-dropdown-item>
+<el-dropdown-item v-if="showBatchExecute && row.status === 'PENDING_EXECUTION'" :icon="VideoPlay" @click="executeOrder(row)">
                 {{ t('ordersPage.actionExecute') }}
-              </el-button>
-              <el-button v-if="row.status === 'EXECUTING'" size="small" :icon="VideoPause" @click="pauseOrder(row)">
+              </el-dropdown-item>
+<el-dropdown-item v-if="row.status === 'EXECUTING'" :icon="VideoPause" @click="pauseOrder(row)">
                 {{ t('ordersPage.actionPause') }}
-              </el-button>
-              <el-button v-if="row.status === 'PAUSED'" size="small" :icon="Edit" @click="openPausedEdit(row)">
-                {{ t('ordersPage.actionEditProgress') }}
-              </el-button>
-              <el-button v-if="row.status === 'PAUSED'" size="small" :icon="VideoPlay" @click="resumeOrder(row)">
+              </el-dropdown-item>
+<el-dropdown-item v-if="row.status === 'PAUSED'" :icon="VideoPlay" @click="resumeOrder(row)">
                 {{ t('ordersPage.actionResume') }}
-              </el-button>
-              <el-button v-if="isAuditRow(row) && row.status === 'PENDING_REVIEW'" size="small" :icon="Check" @click="openReviewAudit(row)">
+              </el-dropdown-item>
+<el-dropdown-item v-if="isAuditRow(row) && row.status === 'PENDING_REVIEW'" :icon="Check" @click="openReviewAudit(row)">
                 {{ t('ordersPage.actionReview') }}
-              </el-button>
-              <el-button v-if="canRenewOrder(row)" size="small" :icon="RefreshRight" @click="renewOrder(row)">
+              </el-dropdown-item>
+<el-dropdown-item v-if="canRenewOrder(row)" :icon="RefreshRight" @click="renewOrder(row)">
                 {{ t('ordersPage.actionRenew') }}
-              </el-button>
-              <el-button v-if="canCancel(row)" size="small" type="danger" plain :icon="Delete" @click="cancelOrder(row)">
+              </el-dropdown-item>
+<el-dropdown-item v-if="canCancel(row)" class="danger-menu-item" divided :icon="Delete" @click="cancelOrder(row)">
                 {{ t('ordersPage.actionCancel') }}
-              </el-button>
-            </div>
+              </el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+</div>
           </template>
         </el-table-column>
       </el-table>
@@ -258,8 +266,9 @@
       </div>
     </div>
 
-    <el-dialog append-to-body v-model="pausedEditDialogVisible" :title="t('ordersPage.editPausedOrderTitle')" width="760px">
-      <p class="paused-edit-tip">{{ t('ordersPage.editPausedOrderTip') }}</p>
+    <el-dialog append-to-body class="quantity-adjustment-dialog" v-model="pausedEditDialogVisible" :title="t(editingCompletedOrder ? 'ordersPage.editCompletedTitle' : 'ordersPage.editPausedOrderTitle')" width="760px">
+      <p class="paused-edit-tip">{{ t(editingCompletedOrder ? 'ordersPage.editCompletedTip' : 'ordersPage.editPausedOrderTip') }}</p>
+      <p v-if="!editingCompletedOrder" class="paused-edit-tip">{{ t('ordersPage.closePausedTip') }}</p>
       <el-table :data="pausedEditItems" border>
         <el-table-column :label="t('ordersPage.itemName')" min-width="190">
           <template #default="{ row }">
@@ -268,29 +277,36 @@
           </template>
         </el-table-column>
         <el-table-column :label="t('ordersPage.unitPrice')" width="120" align="right">
-          <template #default="{ row }">USD {{ Number(row.unitPrice).toFixed(2) }}</template>
+          <template #default="{ row }">{{ formatCurrency(row.unitPrice, 4) }}</template>
         </el-table-column>
         <el-table-column :label="t('ordersPage.orderQuantity')" width="170" align="center">
           <template #default="{ row }">
-            <el-input-number v-model="row.quantity" :min="1" :precision="0" controls-position="right" />
+            <span v-if="editingCompletedOrder">{{ row.quantity }}</span>
+            <el-input-number v-else v-model="row.quantity" :min="0" :precision="0" controls-position="right" />
           </template>
         </el-table-column>
         <el-table-column :label="t('ordersPage.completedQuantity')" width="170" align="center">
           <template #default="{ row }">
-            <el-input-number v-model="row.completedQuantity" :min="0" :max="row.quantity" :precision="0" controls-position="right" />
+            <el-input-number v-model="row.completedQuantity" :min="0" :max="editingCompletedOrder ? row.originalCompletedQuantity : row.quantity" :precision="0" controls-position="right" />
           </template>
         </el-table-column>
       </el-table>
+      <el-form v-if="editingCompletedOrder" label-position="top" style="margin-top: 16px">
+        <el-form-item :label="t('ordersPage.adjustmentReason')" required>
+          <el-input v-model="completionAdjustmentReason" type="textarea" :rows="3" maxlength="500" show-word-limit :placeholder="t('ordersPage.adjustmentReasonPlaceholder')" />
+        </el-form-item>
+      </el-form>
       <div class="paused-edit-summary">
-        <span>{{ t('ordersPage.originalAmount') }}：USD {{ pausedOriginalAmount.toFixed(2) }}</span>
-        <strong>{{ t('ordersPage.adjustedAmount') }}：USD {{ pausedAdjustedAmount.toFixed(2) }}</strong>
+        <span>{{ t(editingCompletedOrder ? 'ordersPage.currentNetAmount' : 'ordersPage.originalAmount') }}：{{ formatCurrency(pausedOriginalAmount) }}</span>
+        <strong>{{ t('ordersPage.adjustedAmount') }}：{{ formatCurrency(pausedAdjustedAmount) }}</strong>
         <span :class="{ refund: pausedAmountDifference < 0, debit: pausedAmountDifference > 0 }">
           {{ pausedAdjustmentText }}
         </span>
       </div>
       <template #footer>
         <el-button @click="pausedEditDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="savingPausedEdit" @click="savePausedEdit">{{ t('common.save') }}</el-button>
+        <el-button v-if="!editingCompletedOrder" type="success" :disabled="savingPausedEdit" :loading="closingPausedOrder" @click="closePausedOrder">{{ t('ordersPage.closeOrder') }}</el-button>
+        <el-button type="primary" :disabled="closingPausedOrder" :loading="savingPausedEdit" @click="savePausedEdit">{{ t(editingCompletedOrder ? 'ordersPage.saveCompletedAdjustment' : 'common.save') }}</el-button>
       </template>
     </el-dialog>
     <el-dialog append-to-body v-model="reviewDialogVisible" :title="t('specialAudit.review')" width="860px">
@@ -299,7 +315,7 @@
           <el-input v-model="reviewForm.negotiatedContent" type="textarea" :rows="4" />
         </el-form-item>
         <el-table v-if="reviewUsesItemPricing" :data="reviewForm.itemPricing" border>
-          <el-table-column :label="selectedAudit?.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keyword')" min-width="180">
+          <el-table-column :label="selectedAudit?.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.chartType') : t('orderCreate.keywords')" min-width="180">
             <template #default="{ row }">{{ row.name }}</template>
           </el-table-column>
           <el-table-column :label="t('orderCreate.unitPrice')" width="180">
@@ -328,11 +344,20 @@
 </template>
 
 <script setup lang="ts">
+import { orderModuleLabel } from '@/utils/orderModuleLabel'
+import { useCompactLayout } from '@/composables/useCompactLayout'
+const isMobile = useCompactLayout()
+const filtersExpanded = ref(false)
+const activeFilterCount = computed(() => Object.entries(filters).filter(([key,v]) => key !== 'storeType' && v !== '' && v !== null && v !== undefined).length + (orderDateRange.value?.length ? 1 : 0) + (createdDateRange.value?.length ? 1 : 0))
+import { statusTone, formatCurrency } from '@/utils/presentation'
+import { useAuthStore } from '@/stores/auth'
+import ReservedOrderTag from '@/components/ReservedOrderTag.vue'
+import { formatOrderSchedule } from '@/utils/orderTime'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Delete, Download, Edit, Plus, RefreshRight, Search, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
+import { MoreFilled, Check, Delete, Download, Edit, Plus, RefreshRight, Search, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
 import {
   batchConfirmAdminOrders,
   batchExecuteAdminOrders,
@@ -344,6 +369,8 @@ import {
   pauseAdminOrder,
   resumeAdminOrder,
   updatePausedAdminOrder,
+  closePausedAdminOrder,
+  adjustCompletedAdminOrder,
   type Order,
   type OrderListStatus,
   type OrderStatus,
@@ -364,6 +391,7 @@ import { usePersistentTableColumns } from '@/composables/usePersistentTableColum
 
 const route = useRoute()
 const router = useRouter()
+const editAuth = useAuthStore()
 const { t } = useI18n()
 
 const defaultColumnKeys = ['orderNo', 'customer', 'app', 'orderTime', 'taskType', 'orderCategory', 'status', 'createdAt', 'actions']
@@ -419,10 +447,13 @@ const customerList = ref<CustomerAccount[]>([])
 const selectedOrders = ref<OrderRow[]>([])
 const loading = ref(false)
 const customersLoading = ref(false)
+const completionAdjustmentReason = ref('')
 const pausedEditDialogVisible = ref(false)
 const savingPausedEdit = ref(false)
+const closingPausedOrder = ref(false)
 const pausedEditOrder = ref<OrderRow | null>(null)
 const pausedOriginalAmount = ref(0)
+const editingCompletedOrder = computed(() => pausedEditOrder.value?.status === 'COMPLETED')
 const pausedEditItems = ref<Array<{
   itemId: number
   itemName: string
@@ -430,6 +461,7 @@ const pausedEditItems = ref<Array<{
   unitPrice: number
   quantity: number
   completedQuantity: number
+  originalCompletedQuantity: number
 }>>([])
 const reviewDialogVisible = ref(false)
 const submittingAudit = ref(false)
@@ -441,7 +473,13 @@ const reviewForm = reactive({
   negotiatedPrice: 0,
   itemPricing: [] as Array<{ itemId: number; name: string; unitPrice: number; executionDays: number }>
 })
-const reviewUsesItemPricing = computed(() => ['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(selectedAudit.value?.orderType || ''))
+const reviewUsesItemPricing = computed(() => {
+  const audit = selectedAudit.value
+  if (!audit) return false
+  if (['RANK_GUARANTEE', 'CHART_RANK_GUARANTEE'].includes(audit.orderType)) return true
+  // Older coverage requests without item rows still use their overall quote.
+  return audit.orderType === 'KEYWORD_COVERAGE' && audit.items.length > 0
+})
 const reviewCalculatedPrice = computed(() => reviewForm.itemPricing.reduce((sum, item) => sum + item.unitPrice * item.executionDays, 0))
 
 const filters = reactive<{
@@ -463,7 +501,9 @@ const filters = reactive<{
 })
 
 const pausedAdjustedAmount = computed(() =>
-  pausedEditItems.value.reduce((total, item) => total + item.quantity * item.unitPrice, 0)
+  editingCompletedOrder.value
+    ? pausedOriginalAmount.value - pausedEditItems.value.reduce((total, item) => total + Math.round((item.originalCompletedQuantity - item.completedQuantity) * item.unitPrice * 100) / 100, 0)
+    : pausedEditItems.value.reduce((total, item) => total + item.quantity * item.unitPrice, 0)
 )
 const pausedAmountDifference = computed(() =>
   Number((pausedAdjustedAmount.value - pausedOriginalAmount.value).toFixed(2))
@@ -781,7 +821,7 @@ function isRenewableOrderStatus(status: OrderListStatus) {
 }
 
 function orderDateText(row: OrderRow) {
-  return isAuditRow(row) ? '-' : `${row.orderStartDate} - ${row.orderEndDate}`
+  return isAuditRow(row) ? '-' : formatOrderSchedule(row)
 }
 
 function ensureSelectedAppMatchesStore() {
@@ -800,8 +840,9 @@ async function executeOrder(order: OrderRow) {
     await executeAdminOrder(order.id)
     ElMessage.success(t('ordersPage.executeSuccess'))
     await loadOrders()
-  } catch {
-    ElMessage.error(t('ordersPage.operationFailed'))
+  } catch (error) {
+    ElMessage.error((error as { response?: { data?: { code?: string } } }).response?.data?.code === 'ORDER_NOT_STARTED'
+      ? t('orderCreate.orderNotStarted') : t('ordersPage.operationFailed'))
   }
 }
 
@@ -838,45 +879,79 @@ async function pauseOrder(order: OrderRow) {
   }
 }
 function openPausedEdit(order: OrderRow) {
-  if (isAuditRow(order) || order.status !== 'PAUSED') return
+  if (isAuditRow(order) || !['PAUSED', 'COMPLETED'].includes(order.status)) return
   pausedEditOrder.value = order
-  pausedOriginalAmount.value = Number(order.totalAmount || 0)
+  pausedOriginalAmount.value = Number(order.totalAmount || 0) - (order.status === 'COMPLETED' ? Number(order.refundAmount || 0) : 0)
   pausedEditItems.value = order.items.map((item) => ({
     itemId: Number(item.id),
     itemName: item.itemName || itemTypeLabel(item.itemType),
     regionCode: item.regionCode,
     unitPrice: Number(item.unitPrice || 0),
-    quantity: Number(item.quantity || 1),
-    completedQuantity: Number(item.completedQuantity || 0)
+    quantity: Number(item.quantity ?? 1),
+    completedQuantity: Number(item.completedQuantity ?? (order.status === 'COMPLETED' && !Number(order.refundAmount || 0) ? item.quantity || 0 : 0)),
+    originalCompletedQuantity: Number(item.completedQuantity ?? (order.status === 'COMPLETED' && !Number(order.refundAmount || 0) ? item.quantity || 0 : 0))
   }))
+  completionAdjustmentReason.value = ''
   pausedEditDialogVisible.value = true
+}
+
+async function closePausedOrder() {
+  const order = pausedEditOrder.value
+  if (!order || closingPausedOrder.value || savingPausedEdit.value) return
+  const original = new Map(order.items.map(item => [item.id, Number(item.quantity || 0)]))
+  if (!pausedEditItems.value.length || pausedEditItems.value.some(item =>
+    !Number.isInteger(item.quantity) || item.quantity < 0 || item.quantity > (original.get(item.itemId) ?? -1))) {
+    ElMessage.warning(t('ordersPage.closeQuantityInvalid'))
+    return
+  }
+  closingPausedOrder.value = true
+  try {
+    await closePausedAdminOrder(order.id, pausedEditItems.value.map(item => ({
+      itemId: item.itemId, quantity: item.quantity, completedQuantity: item.quantity
+    })))
+    ElMessage.success(t('ordersPage.closeSuccess'))
+    pausedEditDialogVisible.value = false
+    await loadOrders()
+  } catch (error) {
+    const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code
+    ElMessage.error(code === 'ORDER_QUANTITY_INVALID' ? t('ordersPage.closeQuantityInvalid') : t('ordersPage.operationFailed'))
+  } finally {
+    closingPausedOrder.value = false
+  }
 }
 
 async function savePausedEdit() {
   const order = pausedEditOrder.value
-  if (!order) return
+  if (!order || savingPausedEdit.value || closingPausedOrder.value) return
   if (pausedEditItems.value.some((item) =>
     !Number.isInteger(item.quantity)
-    || item.quantity < 1
+    || item.quantity < (editingCompletedOrder.value ? 0 : 1)
     || !Number.isInteger(item.completedQuantity)
     || item.completedQuantity < 0
-    || item.completedQuantity > item.quantity
+    || item.completedQuantity > (editingCompletedOrder.value ? item.originalCompletedQuantity : item.quantity)
   )) {
-    ElMessage.warning(t('ordersPage.pausedEditQuantityInvalid'))
+    ElMessage.warning(t(editingCompletedOrder.value ? 'ordersPage.completedQuantityInvalid' : 'ordersPage.pausedEditQuantityInvalid'))
+    return
+  }
+  if (editingCompletedOrder.value && !completionAdjustmentReason.value.trim()) {
+    ElMessage.warning(t('ordersPage.adjustmentReasonRequired'))
     return
   }
   savingPausedEdit.value = true
   try {
-    await updatePausedAdminOrder(order.id, pausedEditItems.value.map((item) => ({
+    const items = pausedEditItems.value.map((item) => ({
       itemId: item.itemId,
       quantity: item.quantity,
       completedQuantity: item.completedQuantity
-    })))
+    }))
+    if (editingCompletedOrder.value) await adjustCompletedAdminOrder(order.id, items, completionAdjustmentReason.value.trim())
+    else await updatePausedAdminOrder(order.id, items)
     ElMessage.success(t('ordersPage.pausedEditSuccess'))
     pausedEditDialogVisible.value = false
     await loadOrders()
-  } catch {
-    ElMessage.error(t('ordersPage.pausedEditFailed'))
+  } catch (error) {
+    const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code
+    ElMessage.error(t(editingCompletedOrder.value && code === 'ORDER_QUANTITY_INVALID' ? 'ordersPage.completedQuantityInvalid' : 'ordersPage.pausedEditFailed'))
   } finally {
     savingPausedEdit.value = false
   }
@@ -932,8 +1007,9 @@ async function batchExecute() {
     ElMessage.success(t('ordersPage.executeSuccess'))
     selectedOrders.value = []
     await loadOrders()
-  } catch {
-    ElMessage.error(t('ordersPage.operationFailed'))
+  } catch (error) {
+    ElMessage.error((error as { response?: { data?: { code?: string } } }).response?.data?.code === 'ORDER_NOT_STARTED'
+      ? t('orderCreate.orderNotStarted') : t('ordersPage.operationFailed'))
   }
 }
 
@@ -1062,7 +1138,7 @@ function typeLabel(type?: string | null) {
 }
 
 function orderTypeLabel(order: Order) {
-  return order.orderModuleName?.trim() || typeLabel(order.orderType)
+  return orderModuleLabel(order)
 }
 
 function statusLabel(status?: OrderListStatus | null) {
@@ -1113,22 +1189,9 @@ function valueOrDash(value?: number | string | null) {
   return value === null || value === undefined || value === '' ? '-' : value
 }
 
-function money(value?: number | null) {
-  return value === null || value === undefined ? '-' : `$${Number(value).toFixed(2)}`
-}
+const money = formatCurrency
 
-function statusTagType(status?: OrderListStatus | null) {
-  if (status === 'PENDING_REVIEW') return 'warning'
-  if (status === 'APPROVED_WAIT_SUBMIT') return 'danger'
-  if (status === 'SUBMITTED') return 'info'
-  if (status === 'COMPLETED') return 'success'
-  if (status === 'EXECUTING') return 'primary'
-  if (status === 'PAUSED') return 'info'
-  if (status === 'PENDING_EXECUTION') return 'warning'
-  if (status === 'PENDING_PAYMENT') return 'danger'
-  if (status === 'CANCELLED') return 'danger'
-  return 'info'
-}
+const statusTagType = statusTone
 
 </script>
 
@@ -1361,32 +1424,13 @@ function statusTagType(status?: OrderListStatus | null) {
   font-size: 12px;
 }
 
-.row-actions {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  justify-content: center;
-  gap: 6px 8px;
-  padding: 2px 0;
-}
 
-.row-actions :deep(.el-button) {
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  margin-left: 0;
-  padding: 5px 8px;
-  justify-content: center;
-}
 
-.row-actions :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
 
-.row-actions .action-detail {
-  border-radius: 6px;
-  background: #eff6ff;
-}
+
+
+
+
 
 .more-actions,
 .more-actions :deep(.el-tooltip__trigger),
@@ -1649,4 +1693,8 @@ function statusTagType(status?: OrderListStatus | null) {
   color: #dc2626;
   font-weight: 700;
 }
+
+
+.mobile-order-summary{display:flex;align-items:flex-start;flex-direction:column;gap:6px;overflow-wrap:anywhere}.mobile-order-summary>span{font-size:12px}.mobile-order-summary .el-tag{max-width:100%;height:auto;white-space:normal}
+@media(max-width:700px){.query-panel:not(.filters-expanded) .query-actions>.el-button{width:auto;min-width:0;flex:1 1 0}}
 </style>

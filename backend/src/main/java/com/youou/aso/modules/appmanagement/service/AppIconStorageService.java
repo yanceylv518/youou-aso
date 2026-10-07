@@ -50,7 +50,7 @@ public class AppIconStorageService {
         this.maxBytes = maxBytes;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
     }
 
@@ -96,7 +96,7 @@ public class AppIconStorageService {
                     .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
                     .GET()
                     .build();
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<byte[]> response = httpClient.send(request, info -> new LimitedBodySubscriber(maxBytes));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 return Optional.empty();
             }
@@ -143,10 +143,42 @@ public class AppIconStorageService {
             if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
                 return Optional.empty();
             }
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            // Only store-owned image CDNs are fetched. Custom icons use the upload endpoint.
+            boolean trusted = java.util.List.of("mzstatic.com", "googleusercontent.com", "ggpht.com").stream()
+                    .anyMatch(domain -> host.equals(domain) || host.endsWith("." + domain));
+            if (!"https".equalsIgnoreCase(scheme) || !trusted || uri.getRawUserInfo() != null
+                    || (uri.getPort() != -1 && uri.getPort() != 443)) return Optional.empty();
             return Optional.of(uri);
         } catch (IllegalArgumentException exception) {
             return Optional.empty();
         }
+    }
+
+    static final class LimitedBodySubscriber implements HttpResponse.BodySubscriber<byte[]> {
+        private final long limit;
+        private long received;
+        private java.util.concurrent.Flow.Subscription subscription;
+        private final HttpResponse.BodySubscriber<byte[]> delegate = HttpResponse.BodySubscribers.ofByteArray();
+        LimitedBodySubscriber(long limit) { this.limit = limit; }
+        public java.util.concurrent.CompletionStage<byte[]> getBody() { return delegate.getBody(); }
+        public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
+            this.subscription = subscription;
+            delegate.onSubscribe(subscription);
+        }
+        public void onNext(java.util.List<java.nio.ByteBuffer> buffers) {
+            for (var buffer : buffers) {
+                received += buffer.remaining();
+                if (received > limit) {
+                    subscription.cancel();
+                    delegate.onError(new IOException("Icon exceeds size limit"));
+                    return;
+                }
+            }
+            delegate.onNext(buffers);
+        }
+        public void onError(Throwable error) { delegate.onError(error); }
+        public void onComplete() { delegate.onComplete(); }
     }
 
     private String normalizeContentType(String contentType) {

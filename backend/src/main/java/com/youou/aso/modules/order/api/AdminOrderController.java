@@ -135,7 +135,7 @@ public class AdminOrderController {
                     request.specialItems(),
                     request.contactType(),
                     request.contactValue(),
-                    request.specialAmount()
+                    request.specialAmount(), request.orderModuleId()
             );
             if (result.paid()) {
                 return ApiResponse.ok(AdminCreateOrderResult.paid(result.order()));
@@ -161,13 +161,48 @@ public class AdminOrderController {
                         request.rating4Count(),
                         request.review5Count(),
                         request.review4Count(),
-                        request.orderModuleId()
+                        request.orderModuleId(),
+                        request.scheduledStartAt()
                 )
         );
         if (OrderStatus.PENDING_PAYMENT.equals(order.getStatus())) {
             return ApiResponse.ok(AdminCreateOrderResult.waitPayment(order));
         }
         return ApiResponse.ok(AdminCreateOrderResult.paid(order));
+    }
+
+    @PreAuthorize("@perm.has('order:create')")
+    @PostMapping("/{id}/edit")
+    public ApiResponse<OrderResult> edit(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id,
+            @Valid @RequestBody AdminCreateOrderRequest request
+    ) {
+        ensureAdmin(account);
+        if (request.orderType() == OrderType.RANK_GUARANTEE || request.orderType() == OrderType.CHART_RANK_GUARANTEE || request.orderType() == OrderType.KEYWORD_COVERAGE) {
+            return ApiResponse.ok(OrderResult.from(specialOrderAuditService.editSubmittedOrder(id, request.customerId(),
+                    account.accountId(), request.customerAppId(), request.orderType(), request.specialItems())));
+        }
+        return ApiResponse.ok(OrderResult.from(orderService.editAdminOrder(request.customerId(), id, account.accountId(),
+                new CreateOrderCommand(
+                        request.customerAppId(),
+                        request.regionCode(),
+                        request.orderType(),
+                        request.startDate(),
+                        request.endDate(),
+                        request.executionHours(),
+                        request.keywords(),
+                        request.keywordItems(),
+                        request.regionItems(),
+                        request.reviewDetails(),
+                        request.dailyDownloadCount(),
+                        request.rating5Count(),
+                        request.rating4Count(),
+                        request.review5Count(),
+                        request.review4Count(),
+                        request.orderModuleId(),
+                        request.scheduledStartAt()
+                ))));
     }
 
     @PreAuthorize("@perm.has('order:execute')")
@@ -210,6 +245,32 @@ public class AdminOrderController {
                         .toList()
         )));
     }
+    @PreAuthorize("@perm.has('order:pause')")
+    @PostMapping("/{id}/completed-items")
+    public ApiResponse<OrderResult> adjustCompletedItems(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id,
+            @Valid @RequestBody AdjustCompletedOrderRequest request
+    ) {
+        ensureAdmin(account);
+        return ApiResponse.ok(OrderResult.from(orderService.adjustCompletedOrder(id, account.accountId(),
+                request.items().stream().map(item -> new OrderService.CompletedItemEdit(
+                        item.itemId(), item.completedQuantity())).toList(), request.reason())));
+    }
+
+    @PreAuthorize("@perm.has('order:pause')")
+    @PostMapping("/{id}/close")
+    public ApiResponse<OrderResult> closePausedOrder(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdatePausedOrderRequest request
+    ) {
+        ensureAdmin(account);
+        return ApiResponse.ok(OrderResult.from(orderService.closePausedOrder(id, account.accountId(),
+                request.items().stream().map(item -> new OrderService.PausedItemEdit(
+                        item.itemId(), item.quantity(), item.quantity())).toList())));
+    }
+
     @PreAuthorize("@perm.has('order:resume')")
     @PostMapping("/{id}/resume")
     public ApiResponse<OrderResult> resume(
@@ -273,6 +334,9 @@ public class AdminOrderController {
         );
     }
 
+    public record AdjustCompletedOrderRequest(@NotNull @Valid List<PausedItemEditRequest> items,
+            @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 500) String reason) {}
+
     public record UpdatePausedOrderRequest(@NotNull List<PausedItemEditRequest> items) {
     }
 
@@ -315,10 +379,47 @@ public class AdminOrderController {
             Integer rating4Count,
             Integer review5Count,
             Integer review4Count,
-            Long orderModuleId,
+            @NotNull Long orderModuleId,
             List<com.youou.aso.modules.order.dto.SubmitSpecialAuditCommand.AuditItem> specialItems,
-            java.math.BigDecimal specialAmount
+            java.math.BigDecimal specialAmount,
+            java.time.LocalDateTime scheduledStartAt
     ) {
+        public AdminCreateOrderRequest(
+            @NotNull
+            Long customerId,
+
+            @NotNull
+            Long customerAppId,
+
+            String regionCode,
+
+            @NotNull
+            OrderType orderType,
+
+            @NotNull
+            LocalDate startDate,
+
+            @NotNull
+            LocalDate endDate,
+
+            Integer executionHours,
+            String contactType,
+            String contactValue,
+            List<String> keywords,
+            List<CreateOrderCommand.KeywordQuantity> keywordItems,
+            List<CreateOrderCommand.RegionOrderItem> regionItems,
+            List<CreateOrderCommand.ReviewDetail> reviewDetails,
+            Integer dailyDownloadCount,
+            Integer rating5Count,
+            Integer rating4Count,
+            Integer review5Count,
+            Integer review4Count,
+            @NotNull Long orderModuleId,
+            List<com.youou.aso.modules.order.dto.SubmitSpecialAuditCommand.AuditItem> specialItems,
+            java.math.BigDecimal specialAmount) {
+            this(customerId, customerAppId, regionCode, orderType, startDate, endDate, executionHours, contactType, contactValue, keywords, keywordItems, regionItems, reviewDetails, dailyDownloadCount, rating5Count, rating4Count, review5Count, review4Count, orderModuleId, specialItems, specialAmount, null);
+        }
+
         public AdminCreateOrderRequest(
                 Long customerId,
                 Long customerAppId,

@@ -23,6 +23,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
     private final RowMapper<SpecialOrderAudit> rowMapper = (rs, rowNum) -> {
         SpecialOrderAudit audit = new SpecialOrderAudit();
         audit.setId(rs.getLong("id"));
+        audit.setOrderModuleId(readLong(rs,"order_module_id"));
         audit.setAuditNo(rs.getString("audit_no"));
         audit.setCustomerId(rs.getLong("customer_id"));
         audit.setCustomerAppId(rs.getLong("customer_app_id"));
@@ -62,8 +63,8 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
                             (audit_no, customer_id, customer_app_id, order_type, store_type, region_code,
                              app_identifier, app_name, app_icon_url, requested_content, contact_type, contact_value, negotiated_content,
                              negotiated_price, status, reviewed_by_admin_id, reviewed_at, cancel_reason,
-                             submitted_order_id, submitted_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             submitted_order_id, submitted_at, order_module_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -83,15 +84,21 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
     }
 
     @Override
+    public Optional<SpecialOrderAudit> findByIdForUpdate(Long id) {
+        return jdbcTemplate.query("SELECT * FROM special_order_audit WHERE id = ? FOR UPDATE", rowMapper, id).stream().findFirst();
+    }
+
+    @Override
     public SpecialOrderAudit update(SpecialOrderAudit audit) {
         jdbcTemplate.update(
                 """
                         UPDATE special_order_audit
-                        SET negotiated_content = ?, negotiated_price = ?, status = ?, reviewed_by_admin_id = ?,
+                        SET region_code = ?, negotiated_content = ?, negotiated_price = ?, status = ?, reviewed_by_admin_id = ?,
                             reviewed_at = ?, cancel_reason = ?, submitted_order_id = ?, submitted_at = ?,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                         """,
+                audit.getRegionCode(),
                 audit.getNegotiatedContent(),
                 audit.getNegotiatedPrice(),
                 audit.getStatus().name(),
@@ -157,6 +164,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
     }
 
     private void bind(PreparedStatement ps, SpecialOrderAudit audit) throws java.sql.SQLException {
+        ps.setObject(21,audit.getOrderModuleId());
         ps.setString(1, audit.getAuditNo());
         ps.setLong(2, audit.getCustomerId());
         ps.setLong(3, audit.getCustomerAppId());

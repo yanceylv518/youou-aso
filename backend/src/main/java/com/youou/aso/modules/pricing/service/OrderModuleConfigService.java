@@ -33,6 +33,14 @@ public class OrderModuleConfigService {
     public OrderModuleConfig save(Long id, String name, String nameEn, String nameRu, String namePt, String nameEs,
                                   String description, String descriptionEn, String descriptionRu, String descriptionPt, String descriptionEs,
                                   OrderType type, BigDecimal price, BigDecimal chinaPrice, boolean enabled, int sort) {
+        return save(id,name,nameEn,nameRu,namePt,nameEs,description,descriptionEn,descriptionRu,descriptionPt,descriptionEs,type,price,chinaPrice,enabled,sort,List.of(com.youou.aso.modules.appmanagement.domain.StoreType.values()));
+    }
+    @Transactional
+    public OrderModuleConfig save(Long id, String name, String nameEn, String nameRu, String namePt, String nameEs,
+                                  String description, String descriptionEn, String descriptionRu, String descriptionPt, String descriptionEs,
+                                  OrderType type, BigDecimal price, BigDecimal chinaPrice, boolean enabled, int sort,
+                                  List<com.youou.aso.modules.appmanagement.domain.StoreType> storeTypes) {
+        if (storeTypes == null || storeTypes.isEmpty() || storeTypes.stream().anyMatch(java.util.Objects::isNull)) throw new BusinessException(ErrorCode.BAD_REQUEST);
         boolean audited = type == OrderType.RANK_GUARANTEE || type == OrderType.CHART_RANK_GUARANTEE
                 || type == OrderType.KEYWORD_COVERAGE;
         if (isBlank(name) || isBlank(nameEn) || isBlank(nameRu) || isBlank(namePt) || isBlank(nameEs)
@@ -46,7 +54,7 @@ public class OrderModuleConfigService {
         if (id != null && repository.findById(id).isEmpty()) throw new BusinessException(ErrorCode.PRICE_INVALID);
         return repository.save(new OrderModuleConfig(id, name.trim(), nameEn.trim(), nameRu.trim(), namePt.trim(), nameEs.trim(),
                 description.trim(), descriptionEn.trim(), descriptionRu.trim(), descriptionPt.trim(), descriptionEs.trim(),
-                type, price, chinaPrice, enabled, sort));
+                type, price, chinaPrice, enabled, sort, storeTypes.stream().distinct().toList()));
     }
     private boolean isBlank(String value) { return value == null || value.isBlank(); }
     @Transactional public void delete(Long id) { repository.deleteById(id); }

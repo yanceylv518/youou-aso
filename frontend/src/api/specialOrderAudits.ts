@@ -8,6 +8,7 @@ export interface SpecialOrderAudit {
   id: number
   auditNo: string
   customerId: number
+  orderModuleId?: number | null
   customerAppId: number
   orderType: OrderType
   storeType: StoreType
@@ -43,6 +44,7 @@ export interface SpecialOrderAuditItem {
 }
 
 export interface SubmitSpecialAuditPayload {
+  orderModuleId?: number | null
   customerAppId: number
   regionCode?: string | null
   orderType: OrderType

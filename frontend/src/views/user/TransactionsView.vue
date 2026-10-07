@@ -37,23 +37,10 @@
     </div>
 
     <div class="table-card">
-      <el-table v-loading="loading" class="transaction-table" :data="transactions" :empty-text="t('wallet.empty')">
-        <el-table-column :label="t('wallet.transactionNo')" min-width="170">
-          <template #default="{ row }"><span class="data-id">{{ row.transactionNo }}</span></template>
-        </el-table-column>
-        <el-table-column :label="t('wallet.type')" min-width="140">
+      <el-table v-loading="loading" max-height="calc(100vh - 250px)" scrollbar-always-on class="transaction-table" :data="transactions" :empty-text="t('wallet.empty')">
+        <el-table-column :label="t('wallet.amount')" width="140" align="right">
           <template #default="{ row }">
-            {{ transactionTypeLabel(row.transactionType) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('wallet.relatedOrder')" min-width="190">
-          <template #default="{ row }">
-            <span class="related-id">{{ row.orderNo || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('wallet.orderType')" min-width="140">
-          <template #default="{ row }">
-            {{ orderTypeLabel(row.orderType) }}
+            <span class="money-value" :class="row.direction === 'CREDIT' ? 'is-credit' : 'is-debit'">{{ formatMoney(row.amount) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.direction')" width="110" align="center">
@@ -63,9 +50,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.amount')" width="140" align="right">
+        <el-table-column :label="t('wallet.createdAt')" min-width="170">
           <template #default="{ row }">
-            <span class="money-value" :class="row.direction === 'CREDIT' ? 'is-credit' : 'is-debit'">{{ formatMoney(row.amount) }}</span>
+            {{ formatDate(row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('wallet.type')" min-width="140">
+          <template #default="{ row }">
+            {{ transactionTypeLabel(row.transactionType) }}
           </template>
         </el-table-column>
         <el-table-column :label="t('wallet.balanceAfter')" width="150" align="right">
@@ -73,9 +65,17 @@
             <span class="balance-value">{{ formatMoney(row.balanceAfter) }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('wallet.createdAt')" min-width="170">
+        <el-table-column :label="t('wallet.transactionNo')" min-width="170">
+          <template #default="{ row }"><span class="data-id">{{ row.transactionNo }}</span></template>
+        </el-table-column>
+        <el-table-column :label="t('wallet.relatedOrder')" min-width="190">
           <template #default="{ row }">
-            {{ formatDate(row.createdAt) }}
+            <span class="related-id">{{ row.orderNo || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('wallet.orderType')" min-width="140">
+          <template #default="{ row }">
+            {{ orderTypeLabel(row.orderType) }}
           </template>
         </el-table-column>
       </el-table>
@@ -96,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCurrency } from '@/utils/presentation'
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -174,15 +175,7 @@ function handlePageSizeChange() {
   loadTransactions()
 }
 
-function formatMoney(value: string | number | undefined | null) {
-  if (value === undefined || value === null || value === '') {
-    return '-'
-  }
-  return `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`
-}
+const formatMoney = formatCurrency
 
 function formatDate(value: string | undefined | null) {
   return value ? value.replace('T', ' ') : '-'
