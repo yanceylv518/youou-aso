@@ -18,6 +18,7 @@
 </template>
 
 <script setup lang="ts">
+import { localizedModule } from '@/utils/moduleLocalization'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -31,8 +32,8 @@ const router = useRouter()
 const modules = ref<OrderModuleConfig[]>([])
 const loading = ref(false)
 const icons: Record<OrderType, unknown> = { KEYWORD_INSTALL: Search, DOWNLOAD: Download, RATING: Star, REVIEW: EditPen, RANK_GUARANTEE: Medal, CHART_RANK_GUARANTEE: Trophy, KEYWORD_COVERAGE: TrendCharts }
-const moduleLabel = (item: OrderModuleConfig) => ({ 'zh-CN':item.moduleName, 'en-US':item.moduleNameEn, 'ru-RU':item.moduleNameRu, 'pt-PT':item.moduleNamePt, 'es-ES':item.moduleNameEs }[locale.value] || item.moduleNameEn)
-const moduleDescription = (item: OrderModuleConfig) => ({ 'zh-CN':item.moduleDescription, 'en-US':item.moduleDescriptionEn, 'ru-RU':item.moduleDescriptionRu, 'pt-PT':item.moduleDescriptionPt, 'es-ES':item.moduleDescriptionEs }[locale.value] || item.moduleDescriptionEn)
+const moduleLabel = (item: OrderModuleConfig) => localizedModule(item, 'moduleName', locale.value)
+const moduleDescription = (item: OrderModuleConfig) => localizedModule(item, 'moduleDescription', locale.value)
 const icon = (value: OrderType) => icons[value]
 function go(value: OrderModuleConfig) { router.push({ name: props.admin ? 'admin-order-create' : 'user-order-create', query: { orderType: value.orderType, orderModuleId: String(value.id) } }) }
 onMounted(async () => { loading.value = true; try { modules.value = (await getCustomerOrderModules()).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id) } finally { loading.value = false } })

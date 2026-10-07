@@ -439,7 +439,7 @@ function viewDetail(order: OrderRow) {
 }
 
 function createOrder() {
-  router.push({ name: 'user-order-create' })
+  router.push({ name: 'user-order-create', query: { storeType: storeType.value || filters.storeType || undefined } })
 }
 
 function canEditOrder(order: OrderRow) {

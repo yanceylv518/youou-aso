@@ -689,6 +689,7 @@
 </template>
 
 <script setup lang="ts">
+import { localizedModule } from '@/utils/moduleLocalization'
 import { formatCurrency } from '@/utils/presentation'
 import { defaultKeywordOrderTime } from '@/utils/orderTime'
 
@@ -1037,27 +1038,23 @@ function effectivePrice(code: PriceCode, regionCode = selectedPricingRegionCodes
   return regionCode === 'CN' ? chinaPriceMap[code] : priceMap[code]
 }
 function moduleLocalizedName(module: OrderModuleConfig) {
-  const lang = locale.value.toLowerCase()
-  if (lang.startsWith('en')) return module.moduleNameEn || module.moduleName
-  if (lang.startsWith('ru')) return module.moduleNameRu || module.moduleName
-  if (lang.startsWith('pt')) return module.moduleNamePt || module.moduleName
-  if (lang.startsWith('es')) return module.moduleNameEs || module.moduleName
-  return module.moduleName
+  return localizedModule(module, 'moduleName', locale.value)
 }
 function moduleLocalizedDescription(module: OrderModuleConfig) {
-  const lang = locale.value.toLowerCase()
-  if (lang.startsWith('en')) return module.moduleDescriptionEn || module.moduleDescription
-  if (lang.startsWith('ru')) return module.moduleDescriptionRu || module.moduleDescription
-  if (lang.startsWith('pt')) return module.moduleDescriptionPt || module.moduleDescription
-  if (lang.startsWith('es')) return module.moduleDescriptionEs || module.moduleDescription
-  return module.moduleDescription
+  return localizedModule(module, 'moduleDescription', locale.value)
 }
 function moduleIcon(orderType: OrderType) {
   return services.find((service) => service.code === orderType)?.icon || Search
 }
 function ensureSelectedOrderModule() {
-  if (selectedOrderModule.value) return
-  selectedOrderModuleId.value = orderModules.value.find((module) => module.enabled && module.orderType === form.orderType)?.id || null
+  // A store-list entry must not be reset by the first module's store defaults.
+  const fromStoreList = ['APP_STORE', 'GOOGLE_PLAY', 'IPAD_STORE'].includes(String(route.query.storeType))
+    && !route.query.orderType && !route.query.orderModuleId && !route.query.orderId && !route.query.renewOrderId
+  if (selectedOrderModule.value && (!fromStoreList || selectedOrderModule.value.storeTypes.includes(form.storeType))) return
+  const candidates = availableOrderModules.value.filter((module) => !fromStoreList || module.storeTypes.includes(form.storeType))
+  const module = candidates.find((item) => item.orderType === form.orderType) || (fromStoreList ? candidates[0] : undefined)
+  if (module) form.orderType = module.orderType
+  selectedOrderModuleId.value = module?.id || null
 }
 const estimatedAmount = computed(() => {
   if (form.orderType === 'KEYWORD_INSTALL') return keywordItems.value.reduce((sum, item) => sum + item.quantity * effectivePrice('KEYWORD_INSTALL', item.regionCode), 0)

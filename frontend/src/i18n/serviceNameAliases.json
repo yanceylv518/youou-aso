@@ -1,0 +1,73 @@
+{
+  "KEYWORD_INSTALL": [
+    "Instalaciones por palabra clave",
+    "Instalación por palabra clave",
+    "Instalação por palavra-chave",
+    "Instalações por palavra-chave",
+    "Keyword Installs",
+    "Keyword install",
+    "Keyword installs",
+    "Установка по ключевому слову",
+    "Установка по ключевым словам",
+    "Установки по ключевым словам",
+    "关键词安装"
+  ],
+  "DOWNLOAD": [
+    "Descarga",
+    "Descargas",
+    "Download",
+    "Downloads",
+    "Transferências",
+    "Загрузка",
+    "Загрузки",
+    "Скачивания",
+    "下载量"
+  ],
+  "RATING": [
+    "Calificaciones",
+    "Classificações",
+    "Ratings",
+    "Оценки",
+    "星级评分"
+  ],
+  "REVIEW": [
+    "Avaliações",
+    "Reseñas",
+    "Reviews",
+    "Отзывы",
+    "用户评价"
+  ],
+  "RANK_GUARANTEE": [
+    "Keyword Ranking",
+    "Keyword ranking guarantee",
+    "Mantenimiento de posiciones por palabra clave",
+    "Mantenimiento de posición",
+    "Manutenção de posição",
+    "Manutenção de posições por palavra-chave",
+    "Posición de palabras clave",
+    "Posição de palavras-chave",
+    "Позиции ключевых слов",
+    "Удержание позиции",
+    "Удержание позиций по ключевым словам",
+    "关键词保排名"
+  ],
+  "CHART_RANK_GUARANTEE": [
+    "Chart ranking guarantee",
+    "Mantenimiento de posiciones en el ranking",
+    "Mantenimiento en el ranking",
+    "Manutenção de posições no ranking",
+    "Manutenção no ranking",
+    "Удержание в рейтинге",
+    "Удержание позиций в чарте",
+    "榜单保排名"
+  ],
+  "KEYWORD_COVERAGE": [
+    "Cobertura de palabras clave",
+    "Cobertura de palavras-chave",
+    "Keyword Coverage",
+    "Keyword coverage",
+    "Охват ключевых слов",
+    "Покрытие ключевых слов",
+    "关键词覆盖"
+  ]
+}

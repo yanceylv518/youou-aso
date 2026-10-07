@@ -14,7 +14,8 @@ const storage = () => {
 }
 function tab(shared, session = storage()) {
   const window = { localStorage: shared, sessionStorage: session, location: { pathname: '/admin/dashboard', search: '', href: '' } }
-  const cache = new Map()
+  const language = { global: { locale: { value: 'en-US' } } }
+  const cache = new Map([['@/i18n', { i18n: language }]])
   function load(name) {
     if (cache.has(name)) return cache.get(name)
     if (!name.startsWith('@/')) return require(name)
@@ -30,7 +31,7 @@ function tab(shared, session = storage()) {
   const auth = load('@/stores/auth').useAuthStore(createPinia())
   const http = load('@/api/http').http
   http.defaults.adapter = async config => ({ data: {}, status: 200, statusText: 'OK', headers: {}, config })
-  return { auth, http, window, session }
+  return { auth, http, window, session, language }
 }
 const login = (tab, token, accountType = 'ADMIN') => tab.auth.applyLoginResult({ token, accountId: 1, username: token, email: '', accountType, roleCode: accountType === 'ADMIN' ? 'ADMIN' : '', forcePasswordChange: false })
 
@@ -112,4 +113,12 @@ test('malformed session is discarded and business 403 does not log out', async (
   await assert.rejects(current.http.get('/test'))
   assert.equal(current.window.location.href, '')
   assert.ok(current.session.getItem('youou_aso_tab_auth'))
+})
+
+test('API language follows the currently selected interface language', async () => {
+  const client = tab(storage())
+  for (const locale of ['zh-CN', 'en-US', 'ru-RU', 'pt-PT', 'es-ES']) {
+    client.language.global.locale.value = locale
+    assert.equal((await client.http.get('/test')).config.headers['Accept-Language'], locale)
+  }
 })

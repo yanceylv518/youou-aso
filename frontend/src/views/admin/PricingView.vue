@@ -23,6 +23,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { localizedModule } from '@/utils/moduleLocalization'
 import {computed,onMounted,onBeforeUnmount,ref} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {useRoute,onBeforeRouteLeave} from 'vue-router'
@@ -36,7 +37,7 @@ import {availableModuleRegions,reconcileModulePricing,pricingSnapshot} from '@/u
 const {t,locale}=useI18n(),route=useRoute()
 const loading=ref(false),saving=ref(false),modules=ref<OrderModuleConfig[]>([]),regions=ref<AdminMarketRegion[]>([]),configs=ref<OrderTypeRegionPricing[]>([]),activeModuleId=ref<number>()
 const storeLabels={APP_STORE:'App Store',GOOGLE_PLAY:'Google Play',IPAD_STORE:'iPad Store'}
-const moduleName=(module:OrderModuleConfig)=>({'zh-CN':module.moduleName,'en-US':module.moduleNameEn,'ru-RU':module.moduleNameRu,'pt-PT':module.moduleNamePt,'es-ES':module.moduleNameEs}[locale.value]||module.moduleNameEn)
+const moduleName=(module:OrderModuleConfig)=>localizedModule(module, 'moduleName', locale.value)
 const activeModule=computed(()=>modules.value.find(m=>m.id===activeModuleId.value))
 const activePriceCodes=computed<PriceCode[]>(()=>({KEYWORD_INSTALL:['KEYWORD_INSTALL'],DOWNLOAD:['DOWNLOAD'],RATING:['RATING_5','RATING_4'],REVIEW:['REVIEW_5','REVIEW_4']} as Partial<Record<OrderType,PriceCode[]>>)[activeModule.value?.orderType as OrderType]||[])
 const activeConfig=computed(()=>configs.value.find(c=>c.orderModuleId===activeModuleId.value))

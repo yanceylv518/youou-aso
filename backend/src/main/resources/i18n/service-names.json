@@ -1,0 +1,65 @@
+[
+  {
+    "zh-CN": "关键词安装",
+    "en-US": "Keyword installs",
+    "ru-RU": "Установки по ключевым словам",
+    "pt-PT": "Instalações por palavra-chave",
+    "es-ES": "Instalaciones por palabra clave"
+  },
+  {
+    "zh-CN": "下载量",
+    "en-US": "Downloads",
+    "ru-RU": "Скачивания",
+    "pt-PT": "Transferências",
+    "es-ES": "Descargas"
+  },
+  {
+    "zh-CN": "星级评分",
+    "en-US": "Ratings",
+    "ru-RU": "Оценки",
+    "pt-PT": "Classificações",
+    "es-ES": "Calificaciones"
+  },
+  {
+    "zh-CN": "用户评价",
+    "en-US": "Reviews",
+    "ru-RU": "Отзывы",
+    "pt-PT": "Avaliações",
+    "es-ES": "Reseñas"
+  },
+  {
+    "zh-CN": "关键词保排名",
+    "en-US": "Keyword ranking guarantee",
+    "ru-RU": "Удержание позиций по ключевым словам",
+    "pt-PT": "Manutenção de posições por palavra-chave",
+    "es-ES": "Mantenimiento de posiciones por palabra clave"
+  },
+  {
+    "zh-CN": "榜单保排名",
+    "en-US": "Chart ranking guarantee",
+    "ru-RU": "Удержание позиций в чарте",
+    "pt-PT": "Manutenção de posições no ranking",
+    "es-ES": "Mantenimiento de posiciones en el ranking"
+  },
+  {
+    "zh-CN": "关键词覆盖",
+    "en-US": "Keyword coverage",
+    "ru-RU": "Охват ключевых слов",
+    "pt-PT": "Cobertura de palavras-chave",
+    "es-ES": "Cobertura de palabras clave"
+  },
+  {
+    "zh-CN": "关键词安装（普通）",
+    "en-US": "Keyword installs (Standard)",
+    "ru-RU": "Установки по ключевым словам (Стандартный)",
+    "pt-PT": "Instalações por palavra-chave (Padrão)",
+    "es-ES": "Instalaciones por palabra clave (Estándar)"
+  },
+  {
+    "zh-CN": "关键词安装（高级）",
+    "en-US": "Keyword installs (Advanced)",
+    "ru-RU": "Установки по ключевым словам (Расширенный)",
+    "pt-PT": "Instalações por palavra-chave (Avançado)",
+    "es-ES": "Instalaciones por palabra clave (Avanzado)"
+  }
+]

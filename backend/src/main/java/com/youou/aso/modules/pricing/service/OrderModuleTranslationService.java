@@ -26,11 +26,17 @@ public class OrderModuleTranslationService {
             "es-ES", "es"
     );
 
+    private final JsonNode serviceNames;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
     public OrderModuleTranslationService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        try (var stream = getClass().getResourceAsStream("/i18n/service-names.json")) {
+            this.serviceNames = objectMapper.readTree(stream);
+        } catch (java.io.IOException ex) {
+            throw new IllegalStateException("Unable to load service terminology", ex);
+        }
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
@@ -45,7 +51,10 @@ public class OrderModuleTranslationService {
         Map<String, CompletableFuture<Translation>> futures = new LinkedHashMap<>();
         LANGUAGE_CODES.forEach((locale, targetLanguage) -> {
             if (!locale.equals(sourceLocale)) {
-                CompletableFuture<String> translatedName = translateText(sourceLanguage, targetLanguage, name);
+                String canonicalName = canonicalName(sourceLocale, locale, name);
+                CompletableFuture<String> translatedName = canonicalName == null
+                        ? translateText(sourceLanguage, targetLanguage, name)
+                        : CompletableFuture.completedFuture(canonicalName);
                 CompletableFuture<String> translatedDescription = translateText(sourceLanguage, targetLanguage, description);
                 futures.put(locale, translatedName.thenCombine(translatedDescription, Translation::new));
             }
@@ -57,6 +66,27 @@ public class OrderModuleTranslationService {
         Map<String, Translation> translations = new LinkedHashMap<>();
         futures.forEach((locale, future) -> translations.put(locale, future.join()));
         return translations;
+    }
+
+    String canonicalName(String sourceLocale, String targetLocale, String name) {
+        if (name == null) return null;
+        String normalized = normalizeName(name);
+        // Historical English labels used "General" and "Key installation".
+        if (sourceLocale.equals("en-US")) {
+            normalized = normalized.replace("keyinstallation", "keywordinstalls")
+                    .replace("keywordinstallation", "keywordinstalls")
+                    .replace("(general)", "(standard)");
+        }
+        for (JsonNode entry : serviceNames) {
+            if (normalizeName(entry.path(sourceLocale).asText()).equals(normalized)) {
+                return entry.path(targetLocale).asText();
+            }
+        }
+        return null;
+    }
+
+    private static String normalizeName(String value) {
+        return value.replace('（', '(').replace('）', ')').replaceAll("\\s+", "").toLowerCase(java.util.Locale.ROOT);
     }
 
     private CompletableFuture<String> translateText(String sourceLanguage, String targetLanguage, String text) {

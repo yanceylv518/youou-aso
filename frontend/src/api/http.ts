@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n'
 import axios from 'axios'
 import type { AxiosError } from 'axios'
 import { readAuthToken, clearAuthSession } from '@/utils/authStorage'
@@ -22,6 +23,7 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
+  config.headers['Accept-Language'] = i18n.global.locale.value
   const token = readAuthToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config

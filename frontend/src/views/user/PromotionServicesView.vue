@@ -22,6 +22,7 @@
 </template>
 
 <script setup lang="ts">
+import { localizedModule } from '@/utils/moduleLocalization'
 import { computed, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -56,8 +57,7 @@ const specialServices = computed(() => services.value.filter((service) => servic
 onMounted(async () => { modules.value = await getCustomerOrderModules() })
 
 function localized(module: OrderModuleConfig, field: 'moduleName' | 'moduleDescription') {
-  const suffix = locale.value === 'en-US' ? 'En' : locale.value === 'ru-RU' ? 'Ru' : locale.value === 'pt-PT' ? 'Pt' : locale.value === 'es-ES' ? 'Es' : ''
-  return String(module[`${field}${suffix}` as keyof OrderModuleConfig] || module[field] || t(`ordersPage.types.${module.orderType}`))
+  return localizedModule(module, field, locale.value)
 }
 const moduleName = (module: OrderModuleConfig) => localized(module, 'moduleName')
 const moduleDescription = (module: OrderModuleConfig) => localized(module, 'moduleDescription')

@@ -672,7 +672,7 @@ function viewDetail(order: OrderRow) {
 }
 
 function createOrder() {
-  router.push({ name: 'admin-order-create' })
+  router.push({ name: 'admin-order-create', query: { storeType: storeType.value || filters.storeType || undefined } })
 }
 
 function canRenewOrder(order: OrderRow) {

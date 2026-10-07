@@ -1,3 +1,4 @@
+import { applyTerminology } from './terminology'
 import { visualMessages } from './visual'
 import { createI18n } from 'vue-i18n'
 import zhCN from './locales/zh-CN'
@@ -50,6 +51,7 @@ if (typeof document !== 'undefined') {
 }
 
 export const localeMessages = { 'zh-CN': { ...zhCN, visual: visualMessages['zh-CN'] }, 'en-US': { ...enUS, visual: visualMessages['en-US'] }, 'ru-RU': { ...ruRU, visual: visualMessages['ru-RU'] }, 'pt-PT': { ...ptPT, visual: visualMessages['pt-PT'] }, 'es-ES': { ...esES, visual: visualMessages['es-ES'] } }
+applyTerminology(localeMessages)
 validateLocaleMessages(localeMessages)
 
 export const i18n = createI18n({
