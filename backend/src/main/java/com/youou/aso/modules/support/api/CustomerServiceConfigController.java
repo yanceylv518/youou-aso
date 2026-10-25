@@ -10,20 +10,23 @@ import com.youou.aso.modules.support.dto.UpdateCustomerServiceConfigCommand;
 import com.youou.aso.modules.support.service.CustomerServiceConfigService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import com.youou.aso.modules.account.repository.CustomerAccountRepository;
 
 @RestController
 @RequestMapping("/api")
 public class CustomerServiceConfigController {
     private final CustomerServiceConfigService service;
+    private final CustomerAccountRepository customers;
 
-    public CustomerServiceConfigController(CustomerServiceConfigService service) {
+    public CustomerServiceConfigController(CustomerServiceConfigService service, CustomerAccountRepository customers) {
+        this.customers = customers;
         this.service = service;
     }
 
@@ -32,26 +35,26 @@ public class CustomerServiceConfigController {
             @AuthenticationPrincipal AuthenticatedAccount account
     ) {
         requireAccountType(account, AccountType.CUSTOMER);
-        return ApiResponse.ok(service.getConfig());
+        return ApiResponse.ok(service.getConfig(customers.findById(account.accountId()).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED)).getOwnerAdminId()));
     }
 
-    @PreAuthorize("@perm.hasMenu('system.customerService')")
     @GetMapping("/admin/support/customer-service")
     public ApiResponse<CustomerServiceConfigResult> getAdminConfig(
+            @RequestParam(defaultValue = "false") boolean personal,
             @AuthenticationPrincipal AuthenticatedAccount account
     ) {
         requireAccountType(account, AccountType.ADMIN);
-        return ApiResponse.ok(service.getConfig());
+        return ApiResponse.ok(service.getConfig(configOwner(account, personal)));
     }
 
-    @PreAuthorize("@perm.has('customerService:update')")
     @PutMapping("/admin/support/customer-service")
     public ApiResponse<CustomerServiceConfigResult> updateAdminConfig(
+            @RequestParam(defaultValue = "false") boolean personal,
             @AuthenticationPrincipal AuthenticatedAccount account,
             @Valid @RequestBody CustomerServiceConfigRequest request
     ) {
         requireAccountType(account, AccountType.ADMIN);
-        return ApiResponse.ok(service.updateConfig(new UpdateCustomerServiceConfigCommand(
+        return ApiResponse.ok(service.updateConfig(configOwner(account, personal), new UpdateCustomerServiceConfigCommand(
                 request.serviceName(),
                 request.qrCodeUrl(),
                 request.contactHint(),
@@ -68,6 +71,12 @@ public class CustomerServiceConfigController {
                 request.whatsappUrl(),
                 request.enabled()
         )));
+    }
+
+    private Long configOwner(AuthenticatedAccount account, boolean personal) {
+        if (personal) return account.accountId();
+        if (!"SUPER_ADMIN".equals(account.roleCode())) throw new BusinessException(ErrorCode.FORBIDDEN);
+        return null;
     }
 
     private void requireAccountType(AuthenticatedAccount account, AccountType accountType) {

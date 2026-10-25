@@ -3,6 +3,8 @@ import { http, type ApiResponse, type PageResult } from './http'
 export type AccountStatus = 'ENABLED' | 'DISABLED' | 'LOCKED'
 
 export interface CustomerAccount {
+  ownerAdminId: number | null
+  ownerAdminUsername: string | null
   id: number
   username: string
   email: string

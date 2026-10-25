@@ -67,6 +67,17 @@
       </section>
     </div>
 
+    <section class="panel referral-panel">
+      <h2>{{ t('referral.title') }}</h2>
+      <p class="hint">{{ t('referral.hint') }}</p>
+      <div class="referral-link-row" v-loading="referralLoading">
+        <el-input :model-value="registrationLink" readonly :aria-label="t('referral.title')" @focus="($event.target as HTMLInputElement).select()" />
+        <el-button :icon="CopyDocument" :disabled="!registrationLink" @click="copyRegistrationLink">{{ t('referral.copy') }}</el-button>
+        <el-button v-if="referralFailed" :icon="Refresh" @click="loadReferral">{{ t('referral.retry') }}</el-button>
+      </div>
+    </section>
+    <CustomerServiceConfigView personal />
+
     <el-dialog append-to-body
       v-model="passwordDialogVisible"
       :title="t('accountSettings.changePassword')"
@@ -117,11 +128,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import CustomerServiceConfigView from './CustomerServiceConfigView.vue'
+import { http, type ApiResponse } from '@/api/http'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Lock, Setting, SwitchButton, User } from '@element-plus/icons-vue'
+import { CopyDocument, Refresh, Lock, Setting, SwitchButton, User } from '@element-plus/icons-vue'
 import { changePassword } from '@/api/auth'
 import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, localeHtmlLang, localeOptions, supportedLocales, type AppLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -129,6 +142,28 @@ import { writeBrowserStorage } from '@/utils/browserStorage'
 
 const { locale, t } = useI18n()
 const router = useRouter()
+const registrationLink = ref('')
+const referralLoading = ref(false)
+const referralFailed = ref(false)
+onMounted(loadReferral)
+async function loadReferral() {
+  referralLoading.value = true
+  referralFailed.value = false
+  try {
+    const response = await http.get<ApiResponse<string>>('/admin/referral')
+    registrationLink.value = new URL(response.data.data, window.location.origin).href
+  } catch {
+    referralFailed.value = true
+    ElMessage.error(t('referral.loadFailed'))
+  } finally { referralLoading.value = false }
+}
+async function copyRegistrationLink() {
+  try {
+    await navigator.clipboard.writeText(registrationLink.value)
+    ElMessage.success(t('referral.copied'))
+  } catch { ElMessage.warning(t('referral.copyManually')) }
+}
+
 const auth = useAuthStore()
 const passwordDialogVisible = ref(false)
 const passwordSubmitting = ref(false)
@@ -204,6 +239,9 @@ function errorMessage(error: unknown, fallback: string) {
 </script>
 
 <style scoped>
+.referral-panel { margin: 20px 0; }
+.referral-link-row { display:flex; gap:12px; flex-wrap:wrap; }
+.referral-link-row .el-input { flex:1 1 280px; min-width:0; }
 .settings-page {
   color: #0f172a;
 }

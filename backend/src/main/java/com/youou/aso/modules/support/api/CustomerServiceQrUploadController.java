@@ -17,7 +17,7 @@ public class CustomerServiceQrUploadController {
         this.imageStorageService = imageStorageService;
     }
 
-    @PreAuthorize("@perm.has('customerService:update')")
+    @PreAuthorize("principal.accountType() == 'ADMIN'")
     @PostMapping("/api/admin/support/customer-service/qr-image")
     public ApiResponse<AppIconUploadResult> upload(@RequestPart("file") MultipartFile file) {
         return ApiResponse.ok(new AppIconUploadResult(imageStorageService.store(file)));

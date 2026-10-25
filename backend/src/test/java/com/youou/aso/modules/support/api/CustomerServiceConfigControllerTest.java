@@ -18,8 +18,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CustomerServiceConfigControllerTest {
     private final CustomerServiceConfigController controller = new CustomerServiceConfigController(
-            new CustomerServiceConfigService(new InMemoryCustomerServiceConfigRepository())
+            new CustomerServiceConfigService(new InMemoryCustomerServiceConfigRepository()), customers()
     );
+
+    private static com.youou.aso.modules.account.repository.CustomerAccountRepository customers() {
+        var repository = org.mockito.Mockito.mock(com.youou.aso.modules.account.repository.CustomerAccountRepository.class);
+        var customer = new com.youou.aso.modules.account.domain.CustomerAccount();
+        customer.setId(10L);
+        org.mockito.Mockito.when(repository.findById(10L)).thenReturn(Optional.of(customer));
+        return repository;
+    }
 
     @Test
     void customerCanReadCustomerServiceConfig() {
@@ -33,7 +41,7 @@ class CustomerServiceConfigControllerTest {
 
     @Test
     void customerCannotUpdateAdminCustomerServiceConfig() {
-        assertThatThrownBy(() -> controller.updateAdminConfig(
+        assertThatThrownBy(() -> controller.updateAdminConfig(false,
                 new AuthenticatedAccount(10L, AccountType.CUSTOMER.name(), "CUSTOMER"),
                 new CustomerServiceConfigController.CustomerServiceConfigRequest(
                         "Support",
@@ -53,7 +61,7 @@ class CustomerServiceConfigControllerTest {
 
     @Test
     void adminCanUpdateCustomerServiceConfig() {
-        CustomerServiceConfigResult result = controller.updateAdminConfig(
+        CustomerServiceConfigResult result = controller.updateAdminConfig(false,
                 new AuthenticatedAccount(1L, AccountType.ADMIN.name(), "SUPER_ADMIN"),
                 new CustomerServiceConfigController.CustomerServiceConfigRequest(
                         "Support",

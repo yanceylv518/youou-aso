@@ -5,6 +5,7 @@ import com.youou.aso.common.error.ErrorCode;
 import com.youou.aso.modules.account.domain.WalletAccount;
 import com.youou.aso.modules.wallet.domain.WalletTransaction;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -37,7 +38,7 @@ public class JdbcAdminWalletRepository implements AdminWalletRepository {
     @Override
     public Optional<WalletAccount> findByCustomerIdForUpdate(Long customerId) {
         return jdbcTemplate.query(
-                        "SELECT * FROM wallet_account WHERE customer_id = ? FOR UPDATE",
+                        "SELECT * FROM wallet_account WHERE customer_id = ?" + CustomerOwnership.condition("customer_id") + " FOR UPDATE",
                         walletRowMapper,
                         customerId
                 )

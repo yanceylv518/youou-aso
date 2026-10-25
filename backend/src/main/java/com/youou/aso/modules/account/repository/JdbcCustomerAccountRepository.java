@@ -3,6 +3,7 @@ package com.youou.aso.modules.account.repository;
 import com.youou.aso.modules.account.domain.AccountStatus;
 import com.youou.aso.modules.account.domain.CustomerAccount;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -22,6 +23,8 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
     private final RowMapper<CustomerAccount> rowMapper = (rs, rowNum) -> {
         CustomerAccount customer = new CustomerAccount();
         customer.setId(rs.getLong("id"));
+        customer.setOwnerAdminId(rs.getObject("owner_admin_id", Long.class));
+        customer.setOwnerAdminUsername(rs.getString("owner_admin_username"));
         customer.setUsername(rs.getString("username"));
         customer.setEmail(rs.getString("email"));
         customer.setPasswordHash(rs.getString("password_hash"));
@@ -66,7 +69,7 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
 
     @Override
     public Optional<CustomerAccount> findById(Long id) {
-        return jdbcTemplate.query("SELECT * FROM customer_account WHERE id = ?", rowMapper, id).stream().findFirst();
+        return jdbcTemplate.query("SELECT customer_account.*, (SELECT a.username FROM admin_account a WHERE a.id = customer_account.owner_admin_id) AS owner_admin_username FROM customer_account WHERE id = ?" + CustomerOwnership.condition("id"), rowMapper, id).stream().findFirst();
     }
 
     @Override
@@ -83,7 +86,7 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
         }
         String placeholders = String.join(",", Collections.nCopies(distinctIds.size(), "?"));
         return jdbcTemplate.query(
-                "SELECT * FROM customer_account WHERE id IN (" + placeholders + ")",
+                "SELECT customer_account.*, (SELECT a.username FROM admin_account a WHERE a.id = customer_account.owner_admin_id) AS owner_admin_username FROM customer_account WHERE id IN (" + placeholders + ")" + CustomerOwnership.condition("id"),
                 rowMapper,
                 distinctIds.toArray()
         );
@@ -92,7 +95,7 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
     @Override
     public Optional<CustomerAccount> findByUsernameOrEmail(String account) {
         return jdbcTemplate.query(
-                "SELECT * FROM customer_account WHERE username = ? OR email = ?",
+                "SELECT customer_account.*, (SELECT a.username FROM admin_account a WHERE a.id = customer_account.owner_admin_id) AS owner_admin_username FROM customer_account WHERE username = ? OR email = ?",
                 rowMapper,
                 account,
                 account
@@ -132,8 +135,8 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
             PreparedStatement ps = connection.prepareStatement(
                     """
                             INSERT INTO customer_account
-                            (username, email, password_hash, status, force_password_change, preferred_locale)
-                            VALUES (?, ?, ?, ?, ?, ?)
+                            (username, email, password_hash, status, force_password_change, preferred_locale, owner_admin_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                             """,
                     Statement.RETURN_GENERATED_KEYS
             );
@@ -143,6 +146,7 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
             ps.setString(4, customer.getStatus().name());
             ps.setBoolean(5, customer.isForcePasswordChange());
             ps.setString(6, customer.getPreferredLocale());
+            ps.setObject(7, customer.getOwnerAdminId());
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -176,10 +180,10 @@ public class JdbcCustomerAccountRepository implements CustomerAccountRepository 
     }
 
     private QueryParts buildQuery(String keyword) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM customer_account");
+        StringBuilder sql = new StringBuilder("SELECT customer_account.*, (SELECT a.username FROM admin_account a WHERE a.id = customer_account.owner_admin_id) AS owner_admin_username FROM customer_account WHERE 1 = 1" + CustomerOwnership.condition("id"));
         List<Object> params = new ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
-            sql.append(" WHERE username LIKE ? OR email LIKE ?");
+            sql.append(" AND (username LIKE ? OR email LIKE ?)");
             String like = "%" + keyword.trim() + "%";
             params.add(like);
             params.add(like);

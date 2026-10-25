@@ -7,6 +7,7 @@ import com.youou.aso.modules.account.domain.WalletAccount;
 import com.youou.aso.modules.wallet.domain.WalletDirection;
 import com.youou.aso.modules.wallet.domain.WalletTransactionType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -48,7 +49,7 @@ public class JdbcWalletService implements WalletService {
         }
 
         WalletAccount wallet = jdbcTemplate.query(
-                        "SELECT * FROM wallet_account WHERE customer_id = ? FOR UPDATE",
+                        "SELECT * FROM wallet_account WHERE customer_id = ?" + CustomerOwnership.condition("customer_id") + " FOR UPDATE",
                         rowMapper,
                         customerId
                 )
@@ -94,7 +95,7 @@ public class JdbcWalletService implements WalletService {
         }
 
         WalletAccount wallet = jdbcTemplate.query(
-                        "SELECT * FROM wallet_account WHERE customer_id = ? FOR UPDATE",
+                        "SELECT * FROM wallet_account WHERE customer_id = ?" + CustomerOwnership.condition("customer_id") + " FOR UPDATE",
                         rowMapper,
                         customerId
                 )
@@ -135,7 +136,7 @@ public class JdbcWalletService implements WalletService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         WalletAccount wallet = jdbcTemplate.query(
-                        "SELECT * FROM wallet_account WHERE customer_id = ? FOR UPDATE",
+                        "SELECT * FROM wallet_account WHERE customer_id = ?" + CustomerOwnership.condition("customer_id") + " FOR UPDATE",
                         rowMapper,
                         customerId
                 )

@@ -4,6 +4,13 @@ import java.time.LocalDateTime;
 
 public class CustomerAccount {
     private Long id;
+    private Long ownerAdminId;
+    private String ownerAdminUsername;
+    public String getOwnerAdminUsername() { return ownerAdminUsername; }
+    public void setOwnerAdminUsername(String value) { ownerAdminUsername = value; }
+
+    public Long getOwnerAdminId() { return ownerAdminId; }
+    public void setOwnerAdminId(Long ownerAdminId) { this.ownerAdminId = ownerAdminId; }
     private String username;
     private String email;
     private String passwordHash;

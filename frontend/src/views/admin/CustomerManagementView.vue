@@ -83,6 +83,9 @@
             <span class="date-cell">{{ formatDate(row.lastLoginAt) }}</span>
           </template>
         </el-table-column>
+        <el-table-column :label="t('referral.owner')" min-width="150">
+          <template #default="{ row }">{{ row.ownerAdminUsername || (row.ownerAdminId ? `#${row.ownerAdminId}` : t('referral.system')) }}</template>
+        </el-table-column>
         <el-table-column :label="t('ordersPage.createdAt')" width="200">
           <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
         </el-table-column>

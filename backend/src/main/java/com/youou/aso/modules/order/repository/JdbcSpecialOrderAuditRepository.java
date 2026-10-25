@@ -5,6 +5,7 @@ import com.youou.aso.modules.order.domain.OrderType;
 import com.youou.aso.modules.order.domain.SpecialAuditStatus;
 import com.youou.aso.modules.order.domain.SpecialOrderAudit;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -55,6 +56,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
 
     @Override
     public SpecialOrderAudit save(SpecialOrderAudit audit) {
+        CustomerOwnership.requireCustomer(jdbcTemplate, audit.getCustomerId());
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
@@ -80,12 +82,12 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
 
     @Override
     public Optional<SpecialOrderAudit> findById(Long id) {
-        return jdbcTemplate.query("SELECT * FROM special_order_audit WHERE id = ?", rowMapper, id).stream().findFirst();
+        return jdbcTemplate.query("SELECT * FROM special_order_audit WHERE id = ?" + CustomerOwnership.condition("customer_id"), rowMapper, id).stream().findFirst();
     }
 
     @Override
     public Optional<SpecialOrderAudit> findByIdForUpdate(Long id) {
-        return jdbcTemplate.query("SELECT * FROM special_order_audit WHERE id = ? FOR UPDATE", rowMapper, id).stream().findFirst();
+        return jdbcTemplate.query("SELECT * FROM special_order_audit WHERE id = ?" + CustomerOwnership.condition("customer_id") + " FOR UPDATE", rowMapper, id).stream().findFirst();
     }
 
     @Override
@@ -115,7 +117,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
     @Override
     public List<SpecialOrderAudit> findByCustomerId(Long customerId) {
         return jdbcTemplate.query(
-                "SELECT * FROM special_order_audit WHERE customer_id = ? ORDER BY created_at DESC, id DESC",
+                "SELECT * FROM special_order_audit WHERE customer_id = ?" + CustomerOwnership.condition("customer_id") + " ORDER BY created_at DESC, id DESC",
                 rowMapper,
                 customerId
         );
@@ -124,7 +126,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
     @Override
     public List<SpecialOrderAudit> findByCustomerId(Long customerId, int limit, int offset) {
         return jdbcTemplate.query(
-                "SELECT * FROM special_order_audit WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+                "SELECT * FROM special_order_audit WHERE customer_id = ?" + CustomerOwnership.condition("customer_id") + " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
                 rowMapper,
                 customerId,
                 limit,
@@ -135,7 +137,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
     @Override
     public long countByCustomerId(Long customerId) {
         Long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM special_order_audit WHERE customer_id = ?",
+                "SELECT COUNT(*) FROM special_order_audit WHERE customer_id = ?" + CustomerOwnership.condition("customer_id"),
                 Long.class,
                 customerId
         );
@@ -144,13 +146,13 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
 
     @Override
     public List<SpecialOrderAudit> findAll() {
-        return jdbcTemplate.query("SELECT * FROM special_order_audit ORDER BY created_at DESC, id DESC", rowMapper);
+        return jdbcTemplate.query("SELECT * FROM special_order_audit WHERE 1 = 1" + CustomerOwnership.condition("customer_id") + " ORDER BY created_at DESC, id DESC", rowMapper);
     }
 
     @Override
     public List<SpecialOrderAudit> findAll(int limit, int offset) {
         return jdbcTemplate.query(
-                "SELECT * FROM special_order_audit ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+                "SELECT * FROM special_order_audit WHERE 1 = 1" + CustomerOwnership.condition("customer_id") + " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
                 rowMapper,
                 limit,
                 offset
@@ -159,7 +161,7 @@ public class JdbcSpecialOrderAuditRepository implements SpecialOrderAuditReposit
 
     @Override
     public long countAll() {
-        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM special_order_audit", Long.class);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM special_order_audit WHERE 1 = 1" + CustomerOwnership.condition("customer_id"), Long.class);
         return total == null ? 0L : total;
     }
 

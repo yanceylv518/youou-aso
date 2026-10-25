@@ -68,7 +68,7 @@ const router = createRouter({
         { path: 'regions', name: 'admin-regions', component: () => import('@/views/admin/RegionView.vue'), meta: { titleKey: 'menu.regions', topTitleKey: 'menu.systemManagement', menuCode: 'system.regions' } },
         { path: 'admin-accounts', name: 'admin-accounts', component: () => import('@/views/admin/AdminAccountsView.vue'), meta: { superAdminOnly: true, titleKey: 'menu.adminAccounts', topTitleKey: 'menu.systemManagement', menuCode: 'system.adminAccounts' } },
         { path: 'roles', redirect: '/admin/admin-accounts' },
-        { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/AccountSettingsView.vue'), meta: { titleKey: 'menu.settings', topTitleKey: 'menu.systemManagement', menuCode: 'system.settings' } }
+        { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/AccountSettingsView.vue'), meta: { titleKey: 'menu.settings', topTitleKey: 'menu.systemManagement' } }
       ]
     }
   ]

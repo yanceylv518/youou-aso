@@ -6,6 +6,7 @@ import com.youou.aso.modules.wallet.domain.WalletDirection;
 import com.youou.aso.modules.wallet.domain.WalletTransaction;
 import com.youou.aso.modules.wallet.domain.WalletTransactionType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
@@ -38,7 +39,7 @@ public class JdbcWalletQueryRepository implements WalletQueryRepository {
     @Override
     public Optional<WalletAccount> findAccountByCustomerId(Long customerId) {
         return jdbcTemplate.query(
-                        "SELECT * FROM wallet_account WHERE customer_id = ?",
+                        "SELECT * FROM wallet_account WHERE customer_id = ?" + CustomerOwnership.condition("customer_id"),
                         walletRowMapper,
                         customerId
                 )
@@ -48,6 +49,7 @@ public class JdbcWalletQueryRepository implements WalletQueryRepository {
 
     @Override
     public List<WalletTransaction> findTransactionsByCustomerId(Long customerId, int limit) {
+        CustomerOwnership.requireCustomer(jdbcTemplate, customerId);
         return jdbcTemplate.query(
                 """
                         SELECT wt.*, o.id AS linked_order_id, o.order_no AS linked_order_no,
@@ -80,6 +82,7 @@ public class JdbcWalletQueryRepository implements WalletQueryRepository {
                 WHERE 1 = 1
                 """);
         List<Object> args = new java.util.ArrayList<>();
+        sql.append(CustomerOwnership.condition("wt.customer_id"));
         if (customerId != null) {
             sql.append(" AND wt.customer_id = ?");
             args.add(customerId);
@@ -163,6 +166,7 @@ public class JdbcWalletQueryRepository implements WalletQueryRepository {
                 WHERE 1 = 1
                 """);
         List<Object> args = new ArrayList<>();
+        sql.append(CustomerOwnership.condition("wt.customer_id"));
         if (customerId != null) {
             sql.append(" AND wt.customer_id = ?");
             args.add(customerId);

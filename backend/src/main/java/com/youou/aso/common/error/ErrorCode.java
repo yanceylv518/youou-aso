@@ -1,6 +1,7 @@
 package com.youou.aso.common.error;
 
 public enum ErrorCode {
+    INVALID_INVITATION,
     OK,
     BAD_REQUEST,
     UNAUTHORIZED,

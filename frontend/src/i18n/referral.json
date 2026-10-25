@@ -1,0 +1,67 @@
+{
+  "zh-CN": {
+    "title": "专属注册链接",
+    "hint": "通过此链接注册的客户将归属于你。普通入口注册的客户归系统。",
+    "copy": "复制链接",
+    "copied": "链接已复制",
+    "copyManually": "复制失败，请选中链接手动复制。",
+    "loadFailed": "加载注册链接失败",
+    "retry": "重试",
+    "supportTitle": "我的专属客服",
+    "supportHint": "这里的联系方式仅展示给你名下的客户，请保存并开启客服显示。",
+    "owner": "所属管理员",
+    "system": "系统"
+  },
+  "en-US": {
+    "title": "Your registration link",
+    "hint": "Customers registering through this link belong to you. Registrations without an invitation belong to the system.",
+    "copy": "Copy link",
+    "copied": "Link copied",
+    "copyManually": "Please select and copy the link manually.",
+    "loadFailed": "Unable to load registration link",
+    "retry": "Retry",
+    "supportTitle": "My customer support",
+    "supportHint": "These contact details are shown only to your customers. Save and enable support to display them.",
+    "owner": "Account owner",
+    "system": "System"
+  },
+  "ru-RU": {
+    "title": "Ваша ссылка регистрации",
+    "hint": "Клиенты, зарегистрированные по этой ссылке, закрепляются за вами. Регистрации без приглашения относятся к системе.",
+    "copy": "Копировать ссылку",
+    "copied": "Ссылка скопирована",
+    "copyManually": "Выделите и скопируйте ссылку вручную.",
+    "loadFailed": "Не удалось загрузить ссылку регистрации",
+    "retry": "Повторить",
+    "supportTitle": "Моя служба поддержки",
+    "supportHint": "Эти контакты видны только вашим клиентам. Сохраните настройки и включите отображение поддержки.",
+    "owner": "Ответственный администратор",
+    "system": "Система"
+  },
+  "pt-PT": {
+    "title": "A sua ligação de registo",
+    "hint": "Os clientes que se registarem por esta ligação ficam associados a si. Os registos sem convite pertencem ao sistema.",
+    "copy": "Copiar ligação",
+    "copied": "Ligação copiada",
+    "copyManually": "Selecione e copie a ligação manualmente.",
+    "loadFailed": "Não foi possível carregar a ligação de registo",
+    "retry": "Tentar novamente",
+    "supportTitle": "O meu apoio ao cliente",
+    "supportHint": "Estes contactos são apresentados apenas aos seus clientes. Guarde e ative o apoio para os apresentar.",
+    "owner": "Administrador responsável",
+    "system": "Sistema"
+  },
+  "es-ES": {
+    "title": "Su enlace de registro",
+    "hint": "Los clientes que se registren mediante este enlace quedarán asignados a usted. Los registros sin invitación pertenecen al sistema.",
+    "copy": "Copiar enlace",
+    "copied": "Enlace copiado",
+    "copyManually": "Seleccione y copie el enlace manualmente.",
+    "loadFailed": "No se pudo cargar el enlace de registro",
+    "retry": "Reintentar",
+    "supportTitle": "Mi atención al cliente",
+    "supportHint": "Estos datos de contacto solo se muestran a sus clientes. Guarde y active la atención para mostrarlos.",
+    "owner": "Administrador responsable",
+    "system": "Sistema"
+  }
+}

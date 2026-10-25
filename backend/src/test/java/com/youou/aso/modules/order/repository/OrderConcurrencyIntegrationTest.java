@@ -54,7 +54,7 @@ class OrderConcurrencyIntegrationTest extends IsolatedMysqlTest {
     private com.youou.aso.modules.appmanagement.domain.CustomerApp listedApp(Long customer) {
         var app = new com.youou.aso.modules.appmanagement.domain.CustomerApp();
         app.setCustomerId(customer); app.setStoreType(StoreType.APP_STORE); app.setRegionCode("US");
-        app.setAppIdentifier("123"); app.setAppName("Test");
+        app.setAppIdentifier("123"); app.setAppName("Test"); app.setVerifiedAt(LocalDateTime.now());
         app.setStatus(com.youou.aso.modules.appmanagement.domain.CustomerAppStatus.ACTIVE);
         org.mockito.Mockito.when(storeVerifier.verify(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
             .thenReturn(Optional.of(new com.youou.aso.modules.appmanagement.service.VerifiedStoreApp(StoreType.APP_STORE, "US", "123", "Test", null, null, "123", null)));
@@ -72,7 +72,7 @@ class OrderConcurrencyIntegrationTest extends IsolatedMysqlTest {
 
     private AsoOrder order(Long customer, OrderStatus status) {
         AsoOrder order = new AsoOrder();
-        order.setOrderNo("TEST-" + UUID.randomUUID()); order.setCustomerId(customer); order.setCustomerAppId(-1L);
+        order.setOrderNo("TEST-" + UUID.randomUUID()); order.setCustomerId(customer); order.setCustomerAppId(status == OrderStatus.PENDING_PAYMENT ? listedApp(customer).getId() : -1L);
         order.setOrderType(OrderType.DOWNLOAD); order.setStoreType(StoreType.APP_STORE); order.setRegionCode("US");
         order.setAppIdentifier("test-app"); order.setAppName("Test"); order.setStatus(status);
         order.setOrderStartDate(LocalDate.now().plusDays(1)); order.setOrderEndDate(LocalDate.now().plusDays(1));

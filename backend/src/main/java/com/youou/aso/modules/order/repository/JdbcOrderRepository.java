@@ -7,6 +7,7 @@ import com.youou.aso.modules.order.domain.OrderType;
 import com.youou.aso.modules.order.dto.OrderQuery;
 import com.youou.aso.modules.pricing.domain.PriceCode;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -73,6 +74,7 @@ public class JdbcOrderRepository implements OrderRepository {
 
     @Override
     public AsoOrder save(AsoOrder order) {
+        CustomerOwnership.requireCustomer(jdbcTemplate, order.getCustomerId());
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
@@ -100,12 +102,12 @@ public class JdbcOrderRepository implements OrderRepository {
 
     @Override
     public Optional<AsoOrder> findById(Long id) {
-        return jdbcTemplate.query("SELECT * FROM aso_order WHERE id = ?", rowMapper, id).stream().findFirst();
+        return jdbcTemplate.query("SELECT * FROM aso_order WHERE id = ?" + CustomerOwnership.condition("customer_id"), rowMapper, id).stream().findFirst();
     }
 
     @Override
     public Optional<AsoOrder> findByIdForUpdate(Long id) {
-        return jdbcTemplate.query("SELECT * FROM aso_order WHERE id = ? FOR UPDATE", rowMapper, id).stream().findFirst();
+        return jdbcTemplate.query("SELECT * FROM aso_order WHERE id = ?" + CustomerOwnership.condition("customer_id") + " FOR UPDATE", rowMapper, id).stream().findFirst();
     }
 
     @Override
@@ -248,9 +250,10 @@ public class JdbcOrderRepository implements OrderRepository {
                             )
                         )
                         AND o.expected_completed_at IS NOT NULL AND o.expected_completed_at <= ?
+                        %s
                         ORDER BY o.expected_completed_at ASC, o.id ASC
                         FOR UPDATE SKIP LOCKED
-                        """,
+                        """.formatted(CustomerOwnership.condition("o.customer_id")),
                 rowMapper,
                 OrderStatus.EXECUTING.name(),
                 OrderStatus.PAUSED.name(),
@@ -259,7 +262,7 @@ public class JdbcOrderRepository implements OrderRepository {
         );
     }
     private QueryParts buildQuery(String baseSql, List<Object> baseParams, OrderQuery query) {
-        StringBuilder sql = new StringBuilder(baseSql);
+        StringBuilder sql = new StringBuilder(baseSql + CustomerOwnership.condition("customer_id"));
         List<Object> params = new ArrayList<>(baseParams);
         if (query != null && query.storeType() != null) {
             sql.append(" AND store_type = ?");

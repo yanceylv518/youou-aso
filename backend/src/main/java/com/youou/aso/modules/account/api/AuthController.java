@@ -38,7 +38,8 @@ public class AuthController {
         return ApiResponse.ok(authService.registerCustomer(new RegisterCustomerCommand(
                 request.username(),
                 request.email(),
-                request.password()
+                request.password(),
+                request.inviteCode()
         )));
     }
 
@@ -95,8 +96,13 @@ public class AuthController {
 
             @NotBlank
             @Size(min = 8, max = 72)
-            String password
+            String password,
+
+            @Size(max = 64) String inviteCode
     ) {
+        public RegisterRequest(String username, String email, String password) {
+            this(username, email, password, null);
+        }
     }
 
     public record LoginRequest(

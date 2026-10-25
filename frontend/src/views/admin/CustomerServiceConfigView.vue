@@ -4,8 +4,8 @@
       <section class="config-card">
         <div class="card-heading">
           <div>
-            <h2>{{ t('supportConfig.title') }}</h2>
-            <p>{{ t('supportConfig.subtitle') }}</p>
+            <h2>{{ t(isPersonal ? 'referral.supportTitle' : 'supportConfig.title') }}</h2>
+            <p>{{ t(isPersonal ? 'referral.supportHint' : 'supportConfig.subtitle') }}</p>
           </div>
         </div>
 
@@ -114,6 +114,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 import { UploadFilled } from '@element-plus/icons-vue'
 import {
   getAdminCustomerServiceConfig,
@@ -124,6 +125,10 @@ import {
 
 const { t } = useI18n()
 const LEGACY_DEFAULT_SERVICE_NAME = 'Youou-ASO Support'
+const props = defineProps<{ personal?: boolean }>()
+const auth = useAuthStore()
+const isPersonal = computed(() => props.personal || !auth.isSuperAdmin)
+
 const LEGACY_DEFAULT_CONTACT_HINT = 'Scan the QR code to contact customer service for recharge.'
 const ZH_DEFAULT_SERVICE_NAME = 'Youou-ASO 客服'
 const ZH_DEFAULT_CONTACT_HINT = '请扫码联系客服完成充值，到账后余额将更新。'
@@ -174,7 +179,7 @@ onMounted(() => {
 async function loadConfig() {
   loading.value = true
   try {
-    const result = await getAdminCustomerServiceConfig()
+    const result = await getAdminCustomerServiceConfig(isPersonal.value)
     config.value = result
     form.serviceName = localizeServiceName(result.serviceName)
     form.qrCodeUrl = result.qrCodeUrl || ''
@@ -241,7 +246,7 @@ async function saveConfig() {
       wechatQrUrl: form.wechatQrUrl.trim() || undefined,
       wechatQrVisible: form.wechatQrVisible,
       enabled: form.enabled
-    })
+    }, isPersonal.value)
     config.value = result
     form.serviceName = localizeServiceName(result.serviceName)
     form.qrCodeUrl = result.qrCodeUrl || ''

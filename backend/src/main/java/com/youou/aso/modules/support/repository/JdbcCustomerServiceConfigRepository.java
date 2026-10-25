@@ -49,9 +49,23 @@ public class JdbcCustomerServiceConfigRepository implements CustomerServiceConfi
 
     @Override
     public CustomerServiceConfig save(CustomerServiceConfig config) {
+        return saveTo("customer_service_config", CONFIG_ID, config);
+    }
+
+    @Override
+    public Optional<CustomerServiceConfig> findForAdmin(Long adminId) {
+        return jdbcTemplate.query("SELECT * FROM admin_customer_service_config WHERE id = ?", rowMapper, adminId).stream().findFirst();
+    }
+
+    @Override
+    public CustomerServiceConfig saveForAdmin(Long adminId, CustomerServiceConfig config) {
+        return saveTo("admin_customer_service_config", adminId, config);
+    }
+
+    private CustomerServiceConfig saveTo(String table, Long id, CustomerServiceConfig config) {
         jdbcTemplate.update(
                 """
-                        INSERT INTO customer_service_config (
+                        INSERT INTO %s (
                             id, service_name, qr_code_url, contact_hint,
                             email, email_visible, phone, phone_visible,
                             teams_url, telegram_url, telegram_qr_url, telegram_qr_visible,
@@ -75,8 +89,8 @@ public class JdbcCustomerServiceConfigRepository implements CustomerServiceConfi
                             whatsapp_url = VALUES(whatsapp_url),
                             enabled = VALUES(enabled),
                             updated_at = CURRENT_TIMESTAMP
-                        """,
-                CONFIG_ID,
+                        """.formatted(table),
+                id,
                 config.getServiceName(),
                 config.getQrCodeUrl(),
                 config.getContactHint(),
@@ -93,6 +107,6 @@ public class JdbcCustomerServiceConfigRepository implements CustomerServiceConfi
                 config.getWhatsappUrl(),
                 config.isEnabled()
         );
-        return find().orElse(config);
+        return jdbcTemplate.query("SELECT * FROM " + table + " WHERE id = ?", rowMapper, id).stream().findFirst().orElse(config);
     }
 }

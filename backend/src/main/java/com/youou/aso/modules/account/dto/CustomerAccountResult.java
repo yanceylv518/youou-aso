@@ -18,7 +18,9 @@ public record CustomerAccountResult(
         BigDecimal frozenBalance,
         LocalDateTime lastLoginAt,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Long ownerAdminId,
+        String ownerAdminUsername
 ) {
     public static CustomerAccountResult from(CustomerAccount customer, WalletAccount wallet) {
         return new CustomerAccountResult(
@@ -32,7 +34,9 @@ public record CustomerAccountResult(
                 wallet == null ? BigDecimal.ZERO : wallet.getFrozenBalance(),
                 customer.getLastLoginAt(),
                 customer.getCreatedAt(),
-                customer.getUpdatedAt()
+                customer.getUpdatedAt(),
+                customer.getOwnerAdminId(),
+                customer.getOwnerAdminUsername()
         );
     }
 }

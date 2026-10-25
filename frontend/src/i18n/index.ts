@@ -1,3 +1,4 @@
+import referral from './referral.json'
 import appAvailability from './appAvailability.json'
 import { applyTerminology } from './terminology'
 import { visualMessages } from './visual'
@@ -51,7 +52,7 @@ if (typeof document !== 'undefined') {
   document.documentElement.lang = localeHtmlLang[initialLocale]
 }
 
-export const localeMessages = { 'zh-CN': { ...zhCN, appAvailability: appAvailability['zh-CN'], visual: visualMessages['zh-CN'] }, 'en-US': { ...enUS, appAvailability: appAvailability['en-US'], visual: visualMessages['en-US'] }, 'ru-RU': { ...ruRU, appAvailability: appAvailability['ru-RU'], visual: visualMessages['ru-RU'] }, 'pt-PT': { ...ptPT, appAvailability: appAvailability['pt-PT'], visual: visualMessages['pt-PT'] }, 'es-ES': { ...esES, appAvailability: appAvailability['es-ES'], visual: visualMessages['es-ES'] } }
+export const localeMessages = { 'zh-CN': { ...zhCN, referral: referral['zh-CN'], appAvailability: appAvailability['zh-CN'], visual: visualMessages['zh-CN'] }, 'en-US': { ...enUS, referral: referral['en-US'], appAvailability: appAvailability['en-US'], visual: visualMessages['en-US'] }, 'ru-RU': { ...ruRU, referral: referral['ru-RU'], appAvailability: appAvailability['ru-RU'], visual: visualMessages['ru-RU'] }, 'pt-PT': { ...ptPT, referral: referral['pt-PT'], appAvailability: appAvailability['pt-PT'], visual: visualMessages['pt-PT'] }, 'es-ES': { ...esES, referral: referral['es-ES'], appAvailability: appAvailability['es-ES'], visual: visualMessages['es-ES'] } }
 applyTerminology(localeMessages)
 validateLocaleMessages(localeMessages)
 

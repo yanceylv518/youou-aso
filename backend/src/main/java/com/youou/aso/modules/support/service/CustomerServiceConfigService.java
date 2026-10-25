@@ -27,7 +27,11 @@ public class CustomerServiceConfigService {
     }
 
     public CustomerServiceConfigResult getConfig() {
-        return repository.find()
+        return getConfig(null);
+    }
+
+    public CustomerServiceConfigResult getConfig(Long adminId) {
+        return (adminId == null ? repository.find() : repository.findForAdmin(adminId))
                 .map(this::toResult)
                 .orElseGet(() -> new CustomerServiceConfigResult(
                         DEFAULT_SERVICE_NAME,
@@ -51,6 +55,11 @@ public class CustomerServiceConfigService {
 
     @Transactional
     public CustomerServiceConfigResult updateConfig(UpdateCustomerServiceConfigCommand command) {
+        return updateConfig(null, command);
+    }
+
+    @Transactional
+    public CustomerServiceConfigResult updateConfig(Long adminId, UpdateCustomerServiceConfigCommand command) {
         String serviceName = normalizeText(command.serviceName(), DEFAULT_SERVICE_NAME, 120);
         String qrCodeUrl = normalizeOptionalUrl(command.qrCodeUrl());
         String contactHint = normalizeText(command.contactHint(), DEFAULT_CONTACT_HINT, 512);
@@ -84,7 +93,7 @@ public class CustomerServiceConfigService {
         config.setWechatQrVisible(command.wechatQrVisible());
         config.setWhatsappUrl(whatsappUrl);
         config.setEnabled(command.enabled());
-        return toResult(repository.save(config));
+        return toResult(adminId == null ? repository.save(config) : repository.saveForAdmin(adminId, config));
     }
 
     private CustomerServiceConfigResult toResult(CustomerServiceConfig config) {

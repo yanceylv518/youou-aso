@@ -51,6 +51,10 @@ public class AuthService {
     private final PasswordResetCodeGenerator passwordResetCodeGenerator;
     private final AdminPermissionService adminPermissionService;
     private final Clock clock;
+    private AdminReferralService referrals;
+
+    @Autowired
+    public void setReferrals(AdminReferralService referrals) { this.referrals = referrals; }
 
     public AuthService(
             CustomerAccountRepository customerAccountRepository,
@@ -115,6 +119,9 @@ public class AuthService {
         }
 
         CustomerAccount customer = new CustomerAccount();
+        if (command.inviteCode() != null && !command.inviteCode().isBlank()) {
+            customer.setOwnerAdminId(referrals.resolveOwner(command.inviteCode()));
+        }
         customer.setUsername(username);
         customer.setEmail(email);
         customer.setPasswordHash(passwordEncoder.encode(command.password()));

@@ -84,13 +84,13 @@ export async function getCustomerServiceConfig() {
   return response.data.data
 }
 
-export async function getAdminCustomerServiceConfig() {
-  const response = await http.get<ApiResponse<CustomerServiceConfig>>('/admin/support/customer-service')
+export async function getAdminCustomerServiceConfig(personal = false) {
+  const response = await http.get<ApiResponse<CustomerServiceConfig>>('/admin/support/customer-service', { params: { personal } })
   return response.data.data
 }
 
-export async function updateAdminCustomerServiceConfig(payload: UpdateCustomerServiceConfigPayload) {
-  const response = await http.put<ApiResponse<CustomerServiceConfig>>('/admin/support/customer-service', payload)
+export async function updateAdminCustomerServiceConfig(payload: UpdateCustomerServiceConfigPayload, personal = false) {
+  const response = await http.put<ApiResponse<CustomerServiceConfig>>('/admin/support/customer-service', payload, { params: { personal } })
   return response.data.data
 }
 

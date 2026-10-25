@@ -5,6 +5,7 @@ import com.youou.aso.modules.appmanagement.domain.CustomerAppStatus;
 import com.youou.aso.modules.appmanagement.domain.StoreType;
 import com.youou.aso.modules.appmanagement.dto.CustomerAppQuery;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -52,11 +53,12 @@ public class JdbcCustomerAppRepository implements CustomerAppRepository {
 
     @Override
     public Optional<CustomerApp> findById(Long id) {
-        return jdbcTemplate.query("SELECT * FROM customer_app WHERE id = ?", rowMapper, id).stream().findFirst();
+        return jdbcTemplate.query("SELECT * FROM customer_app WHERE id = ?" + CustomerOwnership.condition("customer_id"), rowMapper, id).stream().findFirst();
     }
 
     @Override
     public Optional<CustomerApp> findActiveByCustomerStoreAndIdentifier(Long customerId, StoreType storeType, String appIdentifier) {
+        CustomerOwnership.requireCustomer(jdbcTemplate, customerId);
         return jdbcTemplate.query(
                 """
                         SELECT *
@@ -115,6 +117,7 @@ public class JdbcCustomerAppRepository implements CustomerAppRepository {
 
     @Override
     public CustomerApp save(CustomerApp app) {
+        CustomerOwnership.requireCustomer(jdbcTemplate, app.getCustomerId());
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
@@ -304,7 +307,7 @@ public class JdbcCustomerAppRepository implements CustomerAppRepository {
     }
 
     private QueryParts buildQuery(String baseSql, List<Object> baseParams, CustomerAppQuery query) {
-        StringBuilder sql = new StringBuilder(baseSql);
+        StringBuilder sql = new StringBuilder(baseSql + CustomerOwnership.condition("ca.customer_id"));
         List<Object> params = new ArrayList<>(baseParams);
         CustomerAppStatus status = query == null ? CustomerAppStatus.ACTIVE : query.status();
         if (status != null) {

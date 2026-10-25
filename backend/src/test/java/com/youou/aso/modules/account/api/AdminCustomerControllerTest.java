@@ -75,7 +75,7 @@ class AdminCustomerControllerTest {
                 BigDecimal.ZERO,
                 null,
                 LocalDateTime.of(2026, 6, 20, 10, 0),
-                LocalDateTime.of(2026, 6, 20, 10, 0)
+                LocalDateTime.of(2026, 6, 20, 10, 0), null, null
         );
     }
 }

@@ -5,6 +5,7 @@ import com.youou.aso.modules.order.domain.AsoOrder;
 import com.youou.aso.modules.order.domain.OrderType;
 import com.youou.aso.modules.order.dto.CreateOrderCommand;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.youou.aso.modules.account.service.CustomerOwnership;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
@@ -18,6 +19,7 @@ public class ReviewAttachmentService {
     public record Download(String fileName, byte[] content) {}
 
     public Attachment upload(Long customerId, MultipartFile file) {
+        CustomerOwnership.requireCustomer(jdbc, customerId);
         String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").replace('\\', '/');
         name = name.substring(name.lastIndexOf('/') + 1);
         if (name.isBlank() || name.length() > 255 || name.chars().anyMatch(Character::isISOControl)
@@ -65,6 +67,7 @@ public class ReviewAttachmentService {
     }
 
     public Download download(String id, Long customerId) {
+        CustomerOwnership.requireCustomer(jdbc, customerId);
         if (id.startsWith("legacy:")) {
             String[] parts = id.split(":", 3);
             if (parts.length != 3) throw new BusinessException(ErrorCode.NOT_FOUND);

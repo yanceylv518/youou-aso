@@ -34,7 +34,7 @@
 import { computed, nextTick } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import systemLogo from '@/assets/logo/system-logo.png'
 import { ElMessage } from 'element-plus'
@@ -42,6 +42,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
 
@@ -95,7 +96,8 @@ async function submit() {
     await auth.register({
       username,
       email,
-      password: form.password
+      password: form.password,
+      inviteCode: typeof route.query.invite === 'string' ? route.query.invite : undefined
     })
     ElMessage.success(t('auth.registerSuccess'))
     await router.replace('/login')
