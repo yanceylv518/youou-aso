@@ -306,9 +306,11 @@ public class JdbcCustomerAppRepository implements CustomerAppRepository {
     private QueryParts buildQuery(String baseSql, List<Object> baseParams, CustomerAppQuery query) {
         StringBuilder sql = new StringBuilder(baseSql);
         List<Object> params = new ArrayList<>(baseParams);
-        CustomerAppStatus status = query != null && query.status() != null ? query.status() : CustomerAppStatus.ACTIVE;
-        sql.append(" AND ca.status = ?");
-        params.add(status.name());
+        CustomerAppStatus status = query == null ? CustomerAppStatus.ACTIVE : query.status();
+        if (status != null) {
+            sql.append(" AND ca.status = ?");
+            params.add(status.name());
+        }
 
         if (query != null && query.storeType() != null) {
             sql.append(" AND ca.store_type = ?");

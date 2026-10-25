@@ -72,6 +72,8 @@ public class OrderService {
     private final Clock clock;
     private final ReviewAttachmentService reviewAttachmentService;
 
+    private final com.youou.aso.modules.appmanagement.service.AppAvailabilityService appAvailability;
+
     public OrderService(
             CustomerAppRepository customerAppRepository,
             MarketRegionRepository marketRegionRepository,
@@ -85,8 +87,10 @@ public class OrderService {
             WalletService walletService,
             OrderNotificationSender orderNotificationSender,
             Clock clock,
-            ReviewAttachmentService reviewAttachmentService
+            ReviewAttachmentService reviewAttachmentService,
+            com.youou.aso.modules.appmanagement.service.AppAvailabilityService appAvailability
     ) {
+        this.appAvailability = appAvailability;
         this.customerAppRepository = customerAppRepository;
         this.marketRegionRepository = marketRegionRepository;
         this.pricingConfigRepository = pricingConfigRepository;
@@ -260,6 +264,7 @@ public class OrderService {
                 order.getRegionCode(),
                 order.getCommentDetails() == null ? List.of() : order.getCommentDetails()
         );
+        loadActiveCustomerApp(customerId, order.getCustomerAppId());
         applyPaymentStatus(order, currentPrice, "ORDER_DEDUCT_RETRY:" + order.getOrderNo(), paidStatus, order.getConfirmedByAdminId());
         AsoOrder updated = orderRepository.update(order);
         walletService.linkTransactionToOrder(updated.getDeductedTransactionId(), updated.getId());
@@ -593,10 +598,12 @@ public class OrderService {
     }
 
     private CustomerApp loadActiveCustomerApp(Long customerId, Long customerAppId) {
-        return customerAppRepository.findById(customerAppId)
+        CustomerApp app = customerAppRepository.findById(customerAppId)
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .filter(candidate -> CustomerAppStatus.ACTIVE.equals(candidate.getStatus()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
+        appAvailability.requireAvailable(app);
+        return app;
     }
 
     private AsoOrder buildOrder(Long customerId, CustomerApp app, CreateOrderCommand command, PriceSnapshot priceSnapshot) {

@@ -71,6 +71,8 @@ public class SpecialOrderAuditService {
     private final Clock clock;
     private final OrderEventRepository orderEventRepository;
 
+    private final com.youou.aso.modules.appmanagement.service.AppAvailabilityService appAvailability;
+
     public SpecialOrderAuditService(
             CustomerAppRepository customerAppRepository,
             MarketRegionRepository marketRegionRepository,
@@ -81,8 +83,10 @@ public class SpecialOrderAuditService {
             WalletService walletService,
             OrderNotificationSender orderNotificationSender,
             Clock clock,
-            OrderEventRepository orderEventRepository
+            OrderEventRepository orderEventRepository,
+            com.youou.aso.modules.appmanagement.service.AppAvailabilityService appAvailability
     ) {
+        this.appAvailability = appAvailability;
         this.customerAppRepository = customerAppRepository;
         this.marketRegionRepository = marketRegionRepository;
         this.specialOrderAuditRepository = specialOrderAuditRepository;
@@ -107,6 +111,7 @@ public class SpecialOrderAuditService {
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .filter(candidate -> CustomerAppStatus.ACTIVE.equals(candidate.getStatus()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
+        appAvailability.requireAvailable(app);
         String regionCode = resolveLinkedRegion(app, command.regionCode());
         String requestedContent = normalizeOrFallback(command.requestedContent(), defaultAdminSpecialContent(command.orderType(), app));
 
@@ -185,6 +190,7 @@ public class SpecialOrderAuditService {
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()))
                 .filter(candidate -> CustomerAppStatus.ACTIVE.equals(candidate.getStatus()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
+        appAvailability.requireAvailable(app);
         String resolvedRegionCode = resolveLinkedRegion(app, regionCode);
         String content = defaultAdminSpecialContent(orderType, app);
         List<SpecialOrderAuditItem> auditItems = auditItems(items, orderType, app, resolvedRegionCode);
@@ -318,6 +324,10 @@ public class SpecialOrderAuditService {
             throw new BusinessException(ErrorCode.SPECIAL_AUDIT_PRICE_REQUIRED);
         }
 
+        CustomerApp app = customerAppRepository.findById(audit.getCustomerAppId())
+                .filter(candidate -> customerId.equals(candidate.getCustomerId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
+        appAvailability.requireAvailable(app);
         var module=validateModule(audit.getOrderModuleId(),audit.getOrderType(),audit.getStoreType(),specialOrderAuditItemRepository.findByAuditIds(List.of(audit.getId())).getOrDefault(audit.getId(),List.of()));
         int executionDays = specialOrderAuditItemRepository.findByAuditIds(List.of(audit.getId()))
                 .getOrDefault(audit.getId(), List.of()).stream()
@@ -401,6 +411,7 @@ public class SpecialOrderAuditService {
         CustomerApp app = customerAppRepository.findById(appId)
                 .filter(candidate -> customerId.equals(candidate.getCustomerId()) && candidate.getStatus() == CustomerAppStatus.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.APP_NOT_VERIFIED));
+        appAvailability.requireAvailable(app);
         List<SpecialOrderAuditItem> items = auditItems(inputs, type, app, audit.getRegionCode());
         validateRegionCombination(items.stream().map(SpecialOrderAuditItem::getRegionCode).toList());
         validateModule(audit.getOrderModuleId(),audit.getOrderType(),app.getStoreType(),items);

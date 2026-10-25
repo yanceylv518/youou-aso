@@ -1,0 +1,47 @@
+{
+  "zh-CN": {
+    "status": "状态",
+    "active": "可用",
+    "disabled": "已禁用",
+    "check": "检测应用",
+    "available": "应用已上架，已恢复为可用状态",
+    "delisted": "应用已下架，已禁用，不能下单。重新上架后可在应用管理中检测恢复。",
+    "failed": "暂时无法检测应用，请稍后重试，应用状态未改变"
+  },
+  "en-US": {
+    "status": "Status",
+    "active": "Active",
+    "disabled": "Disabled",
+    "check": "Check app",
+    "available": "App is available and has been enabled",
+    "delisted": "App is no longer available and has been disabled. Check it again in Applications after it returns to the store.",
+    "failed": "Unable to check the app. Try again later; its status has not changed"
+  },
+  "ru-RU": {
+    "status": "Статус",
+    "active": "Активно",
+    "disabled": "Отключено",
+    "check": "Проверить приложение",
+    "available": "Приложение доступно и включено",
+    "delisted": "Приложение недоступно и отключено. После возвращения в магазин проверьте его снова в разделе приложений.",
+    "failed": "Не удалось проверить приложение. Повторите позже; статус не изменён"
+  },
+  "pt-PT": {
+    "status": "Estado",
+    "active": "Ativa",
+    "disabled": "Desativada",
+    "check": "Verificar aplicação",
+    "available": "A aplicação está disponível e foi ativada",
+    "delisted": "A aplicação já não está disponível e foi desativada. Verifique-a novamente em Aplicações quando regressar à loja.",
+    "failed": "Não foi possível verificar a aplicação. Tente mais tarde; o estado não foi alterado"
+  },
+  "es-ES": {
+    "status": "Estado",
+    "active": "Activa",
+    "disabled": "Desactivada",
+    "check": "Comprobar aplicación",
+    "available": "La aplicación está disponible y se ha activado",
+    "delisted": "La aplicación ya no está disponible y se ha desactivado. Compruébela de nuevo en Aplicaciones cuando vuelva a la tienda.",
+    "failed": "No se pudo comprobar la aplicación. Inténtelo más tarde; el estado no ha cambiado"
+  }
+}

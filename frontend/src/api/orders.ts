@@ -174,27 +174,27 @@ export async function getCustomerOrder(id: number) {
 }
 
 export async function createCustomerOrder(payload: CreateOrderPayload) {
-  const response = await http.post<ApiResponse<Order>>('/customer/orders', payload)
+  const response = await http.post<ApiResponse<Order>>('/customer/orders', payload, { timeout: 60000 })
   return response.data.data
 }
 
 export async function resubmitCustomerOrder(id: number, payload: CreateOrderPayload) {
-  const response = await http.post<ApiResponse<Order>>(`/customer/orders/${id}/resubmit`, payload)
+  const response = await http.post<ApiResponse<Order>>(`/customer/orders/${id}/resubmit`, payload, { timeout: 60000 })
   return response.data.data
 }
 
 export async function payCustomerOrder(id: number) {
-  const response = await http.post<ApiResponse<Order>>(`/customer/orders/${id}/pay`)
+  const response = await http.post<ApiResponse<Order>>(`/customer/orders/${id}/pay`, undefined, { timeout: 60000 })
   return response.data.data
 }
 
 export async function editAdminOrder(id: number, payload: AdminCreateOrderPayload) {
-  const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/edit`, payload)
+  const response = await http.post<ApiResponse<Order>>(`/admin/orders/${id}/edit`, payload, { timeout: 60000 })
   return response.data.data
 }
 
 export async function createAdminOrderForCustomer(payload: AdminCreateOrderPayload) {
-  const response = await http.post<ApiResponse<AdminCreateOrderResult>>('/admin/orders/create-for-customer', payload)
+  const response = await http.post<ApiResponse<AdminCreateOrderResult>>('/admin/orders/create-for-customer', payload, { timeout: 60000 })
   return response.data.data
 }
 

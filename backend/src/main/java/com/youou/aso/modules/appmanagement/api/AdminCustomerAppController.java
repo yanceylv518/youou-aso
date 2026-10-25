@@ -33,6 +33,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/apps")
 public class AdminCustomerAppController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.youou.aso.modules.appmanagement.service.AppAvailabilityService availability;
     private final CustomerAppService customerAppService;
 
     public AdminCustomerAppController(CustomerAppService customerAppService) {
@@ -46,11 +48,12 @@ public class AdminCustomerAppController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) StoreType storeType,
             @RequestParam(required = false) String regionCode,
+            @RequestParam(defaultValue = "false") boolean includeDisabled,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer pageSize
     ) {
         ensureAdmin(account);
-        CustomerAppQuery query = new CustomerAppQuery(keyword, storeType, regionCode, null);
+        CustomerAppQuery query = new CustomerAppQuery(keyword, storeType, regionCode, includeDisabled ? null : com.youou.aso.modules.appmanagement.domain.CustomerAppStatus.ACTIVE);
         if (page != null || pageSize != null) {
             PageResult<CustomerAppResult> result = customerAppService.pageAll(query, page, pageSize);
             return ApiResponse.ok(result);
@@ -94,6 +97,13 @@ public class AdminCustomerAppController {
                         request.category()
                 )
         ));
+    }
+
+    @PreAuthorize("@perm.has('app:add')")
+    @PostMapping("/{id}/check")
+    public ApiResponse<String> check(@AuthenticationPrincipal AuthenticatedAccount account, @PathVariable Long id) {
+        ensureAdmin(account);
+        return ApiResponse.ok(availability.recheck(null, id).name());
     }
 
     @PreAuthorize("@perm.has('app:delete')")

@@ -25,6 +25,9 @@ import static org.assertj.core.api.Assertions.*;
 @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "YOUOU_TEST_MYSQL_URL", matches = "jdbc:mysql://.+")
 @SpringBootTest
 class OrderConcurrencyIntegrationTest extends IsolatedMysqlTest {
+    @org.springframework.boot.test.mock.mockito.MockBean com.youou.aso.modules.appmanagement.service.AppStoreVerifier storeVerifier;
+    @Autowired com.youou.aso.modules.appmanagement.repository.CustomerAppRepository apps;
+    @Autowired com.youou.aso.modules.appmanagement.service.AppAvailabilityService availability;
     @Autowired CustomerAccountRepository customers;
     @Autowired WalletAccountRepository wallets;
     @Autowired OrderRepository orders;
@@ -48,6 +51,25 @@ class OrderConcurrencyIntegrationTest extends IsolatedMysqlTest {
         wallets.save(wallet);
         return id;
     }
+    private com.youou.aso.modules.appmanagement.domain.CustomerApp listedApp(Long customer) {
+        var app = new com.youou.aso.modules.appmanagement.domain.CustomerApp();
+        app.setCustomerId(customer); app.setStoreType(StoreType.APP_STORE); app.setRegionCode("US");
+        app.setAppIdentifier("123"); app.setAppName("Test");
+        app.setStatus(com.youou.aso.modules.appmanagement.domain.CustomerAppStatus.ACTIVE);
+        org.mockito.Mockito.when(storeVerifier.verify(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenReturn(Optional.of(new com.youou.aso.modules.appmanagement.service.VerifiedStoreApp(StoreType.APP_STORE, "US", "123", "Test", null, null, "123", null)));
+        return apps.save(app);
+    }
+    @Test void detectedDelistingSurvivesOuterOrderTransactionRollback() {
+        var app = listedApp(customer());
+        org.mockito.Mockito.when(storeVerifier.verify(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> new TransactionTemplate(transactions).executeWithoutResult(tx -> availability.requireAvailable(app)))
+            .isInstanceOf(BusinessException.class);
+        assertThat(apps.findById(app.getId()).orElseThrow().getStatus()).isEqualTo(com.youou.aso.modules.appmanagement.domain.CustomerAppStatus.DISABLED);
+        assertThat(apps.findByCustomerId(app.getCustomerId(), new com.youou.aso.modules.appmanagement.dto.CustomerAppQuery(null, null, null, null))).hasSize(1);
+        assertThat(apps.findByCustomerId(app.getCustomerId(), new com.youou.aso.modules.appmanagement.dto.CustomerAppQuery(null, null, null, com.youou.aso.modules.appmanagement.domain.CustomerAppStatus.ACTIVE))).isEmpty();
+    }
+
     private AsoOrder order(Long customer, OrderStatus status) {
         AsoOrder order = new AsoOrder();
         order.setOrderNo("TEST-" + UUID.randomUUID()); order.setCustomerId(customer); order.setCustomerAppId(-1L);
@@ -97,7 +119,7 @@ class OrderConcurrencyIntegrationTest extends IsolatedMysqlTest {
     @Test void concurrentSpecialSubmissionCreatesAndChargesExactlyOnce() throws Exception {
         Long customer = customer();
         SpecialOrderAudit audit = new SpecialOrderAudit();
-        audit.setAuditNo("TEST-" + UUID.randomUUID()); audit.setCustomerId(customer); audit.setCustomerAppId(-1L);
+        audit.setAuditNo("TEST-" + UUID.randomUUID()); audit.setCustomerId(customer); audit.setCustomerAppId(listedApp(customer).getId());
         audit.setOrderType(OrderType.KEYWORD_COVERAGE); audit.setStoreType(StoreType.APP_STORE); audit.setRegionCode("US");
         audit.setAppIdentifier("test-app"); audit.setAppName("Test"); audit.setRequestedContent("test keyword");
         audit.setNegotiatedPrice(BigDecimal.TEN); audit.setStatus(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);

@@ -50,6 +50,7 @@ class SpecialOrderAuditServiceTest {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-06-20T00:00:00Z"), ZoneOffset.UTC);
 
+    private final com.youou.aso.modules.appmanagement.service.AppAvailabilityService availability = org.mockito.Mockito.mock(com.youou.aso.modules.appmanagement.service.AppAvailabilityService.class);
     private final FakeCustomerAppRepository appRepository = new FakeCustomerAppRepository();
     private final FakeMarketRegionRepository marketRegionRepository = new FakeMarketRegionRepository();
     private final FakeSpecialOrderAuditRepository auditRepository = new FakeSpecialOrderAuditRepository();
@@ -69,7 +70,24 @@ class SpecialOrderAuditServiceTest {
             orderNotificationSender,
             CLOCK,
             org.mockito.Mockito.mock(com.youou.aso.modules.order.repository.OrderEventRepository.class)
-    );
+    , availability);
+
+    @Test void appIsRecheckedBeforeApprovedAuditCanChargeTheCustomer() {
+        walletService.balance = new BigDecimal("100.00");
+        var approved = service.submitCustomerAudit(10L, new SubmitSpecialAuditCommand(1L, OrderType.RANK_GUARANTEE, "keywords"));
+        approved.setStatus(SpecialAuditStatus.APPROVED_WAIT_SUBMIT);
+        approved.setNegotiatedPrice(new BigDecimal("10.00"));
+        auditRepository.update(approved);
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.APP_DELISTED)).when(availability).requireAvailable(org.mockito.ArgumentMatchers.any());
+        assertThatThrownBy(() -> service.submitApprovedAudit(10L, approved.getId()))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.APP_DELISTED);
+        assertThatThrownBy(() -> service.submitCustomerAudit(10L, new SubmitSpecialAuditCommand(1L, OrderType.RANK_GUARANTEE, "keywords")))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.APP_DELISTED);
+        assertThatThrownBy(() -> service.submitAdminSpecialOrder(10L, 7L, 1L, "US", OrderType.RANK_GUARANTEE,
+                List.of(pricedEditItem("US", "keyword", "2.00", 2)), null))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.APP_DELISTED);
+        assertThat(walletService.balance).isEqualByComparingTo("100.00");
+    }
 
     @Test void specialAuditHonorsModuleStoresAndCountries() {
         var modules=org.mockito.Mockito.mock(com.youou.aso.modules.pricing.service.OrderModuleConfigService.class);

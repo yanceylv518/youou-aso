@@ -1,3 +1,4 @@
+import appAvailability from './appAvailability.json'
 import { applyTerminology } from './terminology'
 import { visualMessages } from './visual'
 import { createI18n } from 'vue-i18n'
@@ -50,7 +51,7 @@ if (typeof document !== 'undefined') {
   document.documentElement.lang = localeHtmlLang[initialLocale]
 }
 
-export const localeMessages = { 'zh-CN': { ...zhCN, visual: visualMessages['zh-CN'] }, 'en-US': { ...enUS, visual: visualMessages['en-US'] }, 'ru-RU': { ...ruRU, visual: visualMessages['ru-RU'] }, 'pt-PT': { ...ptPT, visual: visualMessages['pt-PT'] }, 'es-ES': { ...esES, visual: visualMessages['es-ES'] } }
+export const localeMessages = { 'zh-CN': { ...zhCN, appAvailability: appAvailability['zh-CN'], visual: visualMessages['zh-CN'] }, 'en-US': { ...enUS, appAvailability: appAvailability['en-US'], visual: visualMessages['en-US'] }, 'ru-RU': { ...ruRU, appAvailability: appAvailability['ru-RU'], visual: visualMessages['ru-RU'] }, 'pt-PT': { ...ptPT, appAvailability: appAvailability['pt-PT'], visual: visualMessages['pt-PT'] }, 'es-ES': { ...esES, appAvailability: appAvailability['es-ES'], visual: visualMessages['es-ES'] } }
 applyTerminology(localeMessages)
 validateLocaleMessages(localeMessages)
 

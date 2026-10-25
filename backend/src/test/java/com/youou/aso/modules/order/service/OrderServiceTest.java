@@ -54,6 +54,7 @@ class OrderServiceTest {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-06-20T00:00:00Z"), ZoneOffset.UTC);
 
+    private final com.youou.aso.modules.appmanagement.service.AppAvailabilityService availability = org.mockito.Mockito.mock(com.youou.aso.modules.appmanagement.service.AppAvailabilityService.class);
     private final FakeCustomerAppRepository appRepository = new FakeCustomerAppRepository();
     private final FakeMarketRegionRepository marketRegionRepository = new FakeMarketRegionRepository();
     private final FakePricingConfigRepository pricingRepository = new FakePricingConfigRepository();
@@ -82,7 +83,17 @@ class OrderServiceTest {
             orderNotificationSender,
             serviceClock,
             org.mockito.Mockito.mock(ReviewAttachmentService.class)
-        );
+        , availability);
+    }
+
+    @Test void delistedAppBlocksCustomerAndAdminOrdersBeforeCharging() {
+        walletService.balance = new BigDecimal("100.00");
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.APP_DELISTED)).when(availability).requireAvailable(org.mockito.ArgumentMatchers.any());
+        var command = new CreateOrderCommand(1L, OrderType.KEYWORD_INSTALL, LocalDate.of(2026, 6, 21), LocalDate.of(2026, 6, 21), 8, List.of("keyword"), null, null, null, null, null);
+        assertThatThrownBy(() -> orderService.createCustomerOrder(10L, command)).isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.APP_DELISTED);
+        assertThatThrownBy(() -> orderService.createAdminOrderForCustomer(10L, 99L, command)).isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.APP_DELISTED);
+        assertThat(walletService.balance).isEqualByComparingTo("100.00");
+        assertThat(orderNotificationSender.notifiedOrders).isEmpty();
     }
 
     @Test

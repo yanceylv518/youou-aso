@@ -86,12 +86,12 @@ export async function getCustomerSpecialAudit(id: number) {
 }
 
 export async function submitSpecialAudit(payload: SubmitSpecialAuditPayload) {
-  const response = await http.post<ApiResponse<SpecialOrderAudit>>('/customer/special-order-audits', payload)
+  const response = await http.post<ApiResponse<SpecialOrderAudit>>('/customer/special-order-audits', payload, { timeout: 60000 })
   return response.data.data
 }
 
 export async function submitApprovedSpecialAudit(id: number) {
-  const response = await http.post<ApiResponse<Order>>(`/customer/special-order-audits/${id}/submit`)
+  const response = await http.post<ApiResponse<Order>>(`/customer/special-order-audits/${id}/submit`, undefined, { timeout: 60000 })
   return response.data.data
 }
 

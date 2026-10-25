@@ -67,14 +67,21 @@
           {{ formatAppCategory(row.category, locale) }}
         </template>
       </el-table-column>
-      <el-table-column :label="t('applications.actions')" width="110" fixed="right" align="center">
+      <el-table-column :label="t('appAvailability.status')" min-width="130">
+        <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ t(row.status === 'ACTIVE' ? 'appAvailability.active' : 'appAvailability.disabled') }}</el-tag></template>
+      </el-table-column>
+      <el-table-column :label="t('applications.actions')" width="180" fixed="right" align="center">
         <template #default="{ row }">
+          <el-tooltip :content="t('appAvailability.check')" placement="top">
+            <el-button circle text :icon="Refresh" :loading="checkingApps.has(row.id)" :aria-label="t('appAvailability.check')" @click="checkApp(row)" />
+          </el-tooltip>
           <el-tooltip :content="t('applications.createOrder')" placement="top">
             <el-button
               circle
               :aria-label="t('applications.createOrder')"
               :icon="Plus"
               text
+              :disabled="row.status !== 'ACTIVE'"
               @click="createOrder(row)"
             />
           </el-tooltip>
@@ -85,6 +92,7 @@
               :icon="Delete"
               text
               class="danger-icon"
+              :disabled="row.status !== 'ACTIVE'"
               @click="confirmDelete(row)"
             />
           </el-tooltip>
@@ -281,11 +289,12 @@
 </template>
 
 <script setup lang="ts">
+import { checkCustomerApp } from '@/api/applications'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, Search, UploadFilled } from '@element-plus/icons-vue'
+import { Delete, Plus, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { formatAppCategory } from '@/utils/appCategory'
 import StoreIcon from '@/components/StoreIcon.vue'
 import {
@@ -402,11 +411,28 @@ const saveDisabledReason = computed(() => {
   return ''
 })
 
+const checkingApps = ref(new Set<number>())
+async function checkApp(app: CustomerApp) {
+  if (checkingApps.value.has(app.id)) return
+  checkingApps.value.add(app.id)
+  try {
+    const status = await checkCustomerApp(app.id)
+    if (status === 'ACTIVE') ElMessage.success(t('appAvailability.available'))
+    else ElMessage.warning(t('appAvailability.delisted'))
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || t('appAvailability.failed'))
+  } finally {
+    checkingApps.value.delete(app.id)
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
     const [appPage, optionAppList, regionList] = await Promise.all([
       getCustomerAppsPage({
+        includeDisabled: true,
         keyword: filters.keyword,
         storeType: filters.storeType,
         page: pagination.page,

@@ -1,5 +1,8 @@
 package com.youou.aso.modules.appmanagement.service;
 
+import com.youou.aso.common.error.BusinessException;
+import com.youou.aso.common.error.ErrorCode;
+import org.springframework.web.client.HttpClientErrorException;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.youou.aso.modules.appmanagement.domain.StoreType;
@@ -28,11 +31,17 @@ public class HttpAppStoreVerifier implements AppStoreVerifier {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public HttpAppStoreVerifier(RestClient.Builder restClientBuilder, ObjectMapper objectMapper) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
         requestFactory.setReadTimeout(READ_TIMEOUT);
         this.restClient = restClientBuilder.requestFactory(requestFactory).build();
+        this.objectMapper = objectMapper;
+    }
+
+    HttpAppStoreVerifier(RestClient restClient, ObjectMapper objectMapper) {
+        this.restClient = restClient;
         this.objectMapper = objectMapper;
     }
 
@@ -43,10 +52,13 @@ public class HttpAppStoreVerifier implements AppStoreVerifier {
                 return verifyGooglePlay(regionCode, appIdentifier);
             }
             return verifyApple(storeType, regionCode, appIdentifier);
+        } catch (HttpClientErrorException.NotFound ex) {
+            if (storeType == StoreType.GOOGLE_PLAY) return Optional.empty();
+            throw new BusinessException(ErrorCode.APP_VERIFICATION_FAILED);
         } catch (RuntimeException ex) {
             log.warn("Store app verification failed. storeType={}, regionCode={}, appIdentifier={}",
                     storeType, regionCode, appIdentifier, ex);
-            return Optional.empty();
+            throw new BusinessException(ErrorCode.APP_VERIFICATION_FAILED);
         }
     }
 
@@ -139,11 +151,11 @@ public class HttpAppStoreVerifier implements AppStoreVerifier {
                 .retrieve()
                 .body(String.class);
         if (body == null || body.isBlank()) {
-            return Optional.empty();
+            throw new BusinessException(ErrorCode.APP_VERIFICATION_FAILED);
         }
         try {
             AppleLookupResponse response = objectMapper.readValue(body, AppleLookupResponse.class);
-            if (response.resultCount() <= 0 || response.results().isEmpty()) {
+            if (response.resultCount() == 0 && response.results() != null && response.results().isEmpty()) {
                 return Optional.empty();
             }
             AppleLookupItem item = response.results().get(0);
@@ -161,7 +173,7 @@ public class HttpAppStoreVerifier implements AppStoreVerifier {
                     item.primaryGenreName()
             ));
         } catch (Exception ex) {
-            return Optional.empty();
+            throw new BusinessException(ErrorCode.APP_VERIFICATION_FAILED);
         }
     }
 
@@ -226,10 +238,14 @@ public class HttpAppStoreVerifier implements AppStoreVerifier {
                 .uri("https://play.google.com/store/apps/details?id={id}&gl={gl}&hl=en", packageName, regionCode)
                 .retrieve()
                 .body(String.class);
-        if (html == null || html.isBlank() || html.contains("We're sorry, the requested URL was not found")) {
+        if (html == null || html.isBlank()) throw new BusinessException(ErrorCode.APP_VERIFICATION_FAILED);
+        if (html.contains("We're sorry, the requested URL was not found")) {
             return Optional.empty();
         }
-        String appName = extractGooglePlayTitle(html).orElse(packageName);
+        if (!html.contains("SoftwareApplication") || !html.contains(packageName)) {
+            throw new BusinessException(ErrorCode.APP_VERIFICATION_FAILED);
+        }
+        String appName = extractGooglePlayTitle(html).orElseThrow(() -> new BusinessException(ErrorCode.APP_VERIFICATION_FAILED));
         String iconUrl = extractGooglePlayIcon(html).orElse(null);
         String category = extractGooglePlayCategory(html).orElse(null);
         return Optional.of(new VerifiedStoreApp(

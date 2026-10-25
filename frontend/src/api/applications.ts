@@ -44,6 +44,7 @@ export interface AdminCreateCustomerAppPayload extends CreateCustomerAppPayload 
 }
 
 export interface CustomerAppQuery {
+  includeDisabled?: boolean
   keyword?: string
   storeType?: StoreType | ''
   regionCode?: string
@@ -160,4 +161,11 @@ function cleanQuery(params?: CustomerAppQuery) {
   return Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
   )
+}
+
+export async function checkCustomerApp(id: number) {
+  return (await http.post<ApiResponse<string>>(`/customer/apps/${id}/check`, undefined, { timeout: 60000 })).data.data
+}
+export async function checkAdminApp(id: number) {
+  return (await http.post<ApiResponse<string>>(`/admin/apps/${id}/check`, undefined, { timeout: 60000 })).data.data
 }

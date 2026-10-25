@@ -527,12 +527,12 @@
                               {{ form.orderType === 'CHART_RANK_GUARANTEE' ? t('orderCreate.addChartType') : t('orderCreate.addKeyword') }}
                             </el-button>
                             <el-button
-                              v-if="index === 0 && form.orderType === 'KEYWORD_COVERAGE'"
+                              v-if="index === 0 && ['KEYWORD_COVERAGE', 'RANK_GUARANTEE'].includes(form.orderType)"
                               size="small"
                               text
                               :icon="Plus"
                               class="add-keyword-button"
-                              @click="openBatchKeywordDialog(groupIndex, 'coverage')"
+                              @click="openBatchKeywordDialog(groupIndex, 'special')"
                             >
                               {{ t('orderCreate.batchKeywordImport') }}
                             </el-button>
@@ -646,14 +646,14 @@
       @closed="batchKeywordText = ''"
     >
       <div class="batch-keyword-body">
-        <p class="batch-keyword-tip">{{ t(batchKeywordMode === 'coverage' ? 'orderCreate.batchCoverageKeywordDialogTip' : 'orderCreate.batchKeywordDialogTip') }}</p>
+        <p class="batch-keyword-tip">{{ t(batchKeywordMode === 'special' ? 'orderCreate.batchCoverageKeywordDialogTip' : 'orderCreate.batchKeywordDialogTip') }}</p>
         <el-input
           v-model="batchKeywordText"
           class="batch-keyword-input"
           type="textarea"
           :autosize="{ minRows: 7, maxRows: 10 }"
           resize="vertical"
-          :placeholder="t(batchKeywordMode === 'coverage' ? 'orderCreate.batchCoverageKeywordPlaceholder' : 'orderCreate.batchKeywordPlaceholder')"
+          :placeholder="t(batchKeywordMode === 'special' ? 'orderCreate.batchCoverageKeywordPlaceholder' : 'orderCreate.batchKeywordPlaceholder')"
         />
       </div>
       <template #footer>
@@ -775,7 +775,7 @@ const reviewImportGroupIndex = ref<number | null>(null)
 const batchKeywordDialogVisible = ref(false)
 const batchKeywordText = ref('')
 const batchKeywordGroupIndex = ref<number | null>(null)
-const batchKeywordMode = ref<'install' | 'coverage'>('install')
+const batchKeywordMode = ref<'install' | 'special'>('install')
 const apps = ref<CustomerApp[]>([])
 const regions = ref<MarketRegion[]>([])
 const orderModules = ref<OrderModuleConfig[]>([])
@@ -1457,8 +1457,8 @@ function removeKeywordItem(groupIndex: number, index: number) {
   group.keywordItems.splice(index, 1)
 }
 
-function openBatchKeywordDialog(groupIndex: number, mode: 'install' | 'coverage' = 'install') {
-  const group = mode === 'coverage' ? form.specialGroups[groupIndex] : form.regionGroups[groupIndex]
+function openBatchKeywordDialog(groupIndex: number, mode: 'install' | 'special' = 'install') {
+  const group = mode === 'special' ? form.specialGroups[groupIndex] : form.regionGroups[groupIndex]
   if (!group) return
   batchKeywordMode.value = mode
   batchKeywordGroupIndex.value = groupIndex
@@ -1468,9 +1468,9 @@ function openBatchKeywordDialog(groupIndex: number, mode: 'install' | 'coverage'
 
 function confirmBatchKeywordImport() {
   const groupIndex = batchKeywordGroupIndex.value
-  if (batchKeywordMode.value === 'coverage') {
+  if (batchKeywordMode.value === 'special') {
     const group = groupIndex === null ? undefined : form.specialGroups[groupIndex]
-    if (!group || form.orderType !== 'KEYWORD_COVERAGE') return
+    if (!group || !['KEYWORD_COVERAGE', 'RANK_GUARANTEE'].includes(form.orderType)) return
     let keywords: string[]
     try {
       keywords = parseCoverageKeywordText(batchKeywordText.value)

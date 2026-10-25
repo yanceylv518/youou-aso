@@ -213,7 +213,7 @@ public class CustomerAppService {
                 normalizeKeyword(query.keyword()),
                 query.storeType(),
                 normalizeRegionCode(query.regionCode()),
-                CustomerAppStatus.ACTIVE
+                query.status()
         );
     }
 
